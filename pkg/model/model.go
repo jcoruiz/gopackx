@@ -22,15 +22,27 @@ const (
 	RotationWDH RotationType = 5 // width, depth, height
 )
 
-// AllRotations contains all 6 possible rotation types.
-var AllRotations = []RotationType{
+// allRotations is the canonical list of all 6 rotation types.
+var allRotations = [6]RotationType{
 	RotationWHD, RotationHWD, RotationHDW,
 	RotationDHW, RotationDWH, RotationWDH,
 }
 
-// UprightRotations contains only rotations that keep the original height axis vertical.
-var UprightRotations = []RotationType{
+// uprightRotations is the canonical list of upright-only rotations.
+var uprightRotations = [2]RotationType{
 	RotationWHD, RotationDHW,
+}
+
+// AllRotations returns a copy of all 6 possible rotation types.
+func AllRotations() []RotationType {
+	r := allRotations
+	return r[:]
+}
+
+// UprightRotations returns a copy of rotations that keep the height axis vertical.
+func UprightRotations() []RotationType {
+	r := uprightRotations
+	return r[:]
 }
 
 // rotationMatrix maps each RotationType to the index permutation of [width, height, depth].
@@ -61,16 +73,56 @@ type Item struct {
 	Placed           bool
 }
 
+// ItemOption configures optional fields on an Item.
+type ItemOption func(*Item)
+
 // NewItem creates a new Item with precalculated volume.
-func NewItem(id string, w, h, d, weight float64) *Item {
-	return &Item{
+func NewItem(id string, w, h, d, weight float64, opts ...ItemOption) *Item {
+	item := &Item{
 		ID:               id,
 		Width:            w,
 		Height:           h,
 		Depth:            d,
 		Weight:           weight,
 		Volume:           w * h * d,
-		AllowedRotations: AllRotations,
+		AllowedRotations: AllRotations(),
+	}
+	for _, opt := range opts {
+		opt(item)
+	}
+	return item
+}
+
+// ItemUpright restricts the item to rotations that keep the height axis vertical.
+func ItemUpright() ItemOption {
+	return func(i *Item) { i.AllowedRotations = UprightRotations() }
+}
+
+// ItemPriority sets the packing priority (1=highest).
+func ItemPriority(p int) ItemOption {
+	return func(i *Item) { i.Priority = p }
+}
+
+// ItemLoadBear sets the maximum weight the item can support on top.
+func ItemLoadBear(lb float64) ItemOption {
+	return func(i *Item) { i.LoadBear = lb }
+}
+
+// ItemFragile marks the item as fragile (nothing can be placed on top).
+func ItemFragile() ItemOption {
+	return func(i *Item) { i.Fragile = true }
+}
+
+// ItemGroup assigns the item to a binding group.
+func ItemGroup(g string) ItemOption {
+	return func(i *Item) { i.Group = g }
+}
+
+// ItemAllowedRotations sets custom allowed rotations.
+func ItemAllowedRotations(rots []RotationType) ItemOption {
+	return func(i *Item) {
+		i.AllowedRotations = make([]RotationType, len(rots))
+		copy(i.AllowedRotations, rots)
 	}
 }
 
