@@ -141,8 +141,22 @@ func (e *ExtremePointEngine) onItemPlaced(item *model.Item) {
 	dim := item.Dimension()
 
 	e.removePointsInside(item, dim)
+
+	// Incrementally update MaxSpace for existing points against only the new item.
+	// MaxSpace can only decrease when a new item is added (Crainic et al. 2008, Algorithm 2).
+	e.updateMaxSpaceIncremental(item, dim)
+
+	// Generate new candidate points from the placed item.
+	oldCount := len(e.points)
 	e.generatePoints(item, dim)
-	e.recalculateMaxSpace()
+
+	// New points need full MaxSpace calculation against all items.
+	for i := oldCount; i < len(e.points); i++ {
+		e.calculateMaxSpace(e.points[i])
+	}
+
+	// Remove points with zero max space on any axis.
+	e.removeZeroSpacePoints()
 }
 
 // removePointsInside removes candidate points that fall inside the placed item's volume.
@@ -365,13 +379,47 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	return support
 }
 
-// recalculateMaxSpace updates max available space for all points.
-func (e *ExtremePointEngine) recalculateMaxSpace() {
-	for _, ep := range e.points {
-		e.calculateMaxSpace(ep)
-	}
+// updateMaxSpaceIncremental reduces MaxSpace of existing points based on a newly placed item.
+// This is the core optimization: instead of recalculating all points against all items O(P*n),
+// we only check the new item against all points O(P), since MaxSpace can only shrink.
+func (e *ExtremePointEngine) updateMaxSpaceIncremental(item *model.Item, dim [3]float64) {
+	ip := item.Position
 
-	// Remove points with zero max space on any axis.
+	for _, ep := range e.points {
+		// Width axis: new item blocks to the right.
+		if ip[0] > ep.Pos[0]-epsilon &&
+			ep.Pos[1] >= ip[1]-epsilon && ep.Pos[1] < ip[1]+dim[1]-epsilon &&
+			ep.Pos[2] >= ip[2]-epsilon && ep.Pos[2] < ip[2]+dim[2]-epsilon {
+			gap := ip[0] - ep.Pos[0]
+			if gap >= -epsilon && gap < ep.MaxSpace[0] {
+				ep.MaxSpace[0] = math.Max(0, gap)
+			}
+		}
+
+		// Height axis: new item blocks above.
+		if ip[1] > ep.Pos[1]-epsilon &&
+			ep.Pos[0] >= ip[0]-epsilon && ep.Pos[0] < ip[0]+dim[0]-epsilon &&
+			ep.Pos[2] >= ip[2]-epsilon && ep.Pos[2] < ip[2]+dim[2]-epsilon {
+			gap := ip[1] - ep.Pos[1]
+			if gap >= -epsilon && gap < ep.MaxSpace[1] {
+				ep.MaxSpace[1] = math.Max(0, gap)
+			}
+		}
+
+		// Depth axis: new item blocks behind.
+		if ip[2] > ep.Pos[2]-epsilon &&
+			ep.Pos[0] >= ip[0]-epsilon && ep.Pos[0] < ip[0]+dim[0]-epsilon &&
+			ep.Pos[1] >= ip[1]-epsilon && ep.Pos[1] < ip[1]+dim[1]-epsilon {
+			gap := ip[2] - ep.Pos[2]
+			if gap >= -epsilon && gap < ep.MaxSpace[2] {
+				ep.MaxSpace[2] = math.Max(0, gap)
+			}
+		}
+	}
+}
+
+// removeZeroSpacePoints removes points with zero max space on any axis.
+func (e *ExtremePointEngine) removeZeroSpacePoints() {
 	n := 0
 	for _, ep := range e.points {
 		if ep.MaxSpace[0] > epsilon && ep.MaxSpace[1] > epsilon && ep.MaxSpace[2] > epsilon {
