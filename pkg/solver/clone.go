@@ -9,6 +9,7 @@ func resetItem(item *model.Item) *model.Item {
 	copy(c.AllowedRotations, item.AllowedRotations)
 	c.Placed = false
 	c.Position = [3]float64{}
+	c.PlacedDim = [3]float64{}
 	c.RotationType = 0
 	return &c
 }
@@ -27,6 +28,8 @@ func cloneBinEmpty(bin *model.Bin) *model.Bin {
 	c := *bin
 	c.Items = nil
 	c.UnfittedItems = nil
+	c.ItemWeight = 0
+	c.ItemVolume = 0
 	return &c
 }
 

@@ -152,8 +152,7 @@ func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
 		item.Position = savedPos
 	}
 
-	item.Placed = true
-	bin.Items = append(bin.Items, item)
+	bin.PlaceItem(item)
 	e.levels = append(e.levels, lvl)
 	return true
 }
@@ -188,8 +187,7 @@ func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLev
 				item.Position = savedPos
 			}
 
-			item.Placed = true
-			bin.Items = append(bin.Items, item)
+			bin.PlaceItem(item)
 			return true
 		}
 	}

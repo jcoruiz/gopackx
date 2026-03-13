@@ -33,16 +33,20 @@ var uprightRotations = [2]RotationType{
 	RotationWHD, RotationDHW,
 }
 
-// AllRotations returns a copy of all 6 possible rotation types.
+// Shared slices backed by the canonical arrays. Must not be modified.
+var allRotationsSlice = allRotations[:]
+var uprightRotationsSlice = uprightRotations[:]
+
+// AllRotations returns all 6 possible rotation types.
+// The returned slice must not be modified by the caller.
 func AllRotations() []RotationType {
-	r := allRotations
-	return r[:]
+	return allRotationsSlice
 }
 
-// UprightRotations returns a copy of rotations that keep the height axis vertical.
+// UprightRotations returns rotations that keep the height axis vertical.
+// The returned slice must not be modified by the caller.
 func UprightRotations() []RotationType {
-	r := uprightRotations
-	return r[:]
+	return uprightRotationsSlice
 }
 
 // rotationMatrix maps each RotationType to the index permutation of [width, height, depth].
@@ -71,6 +75,7 @@ type Item struct {
 	Fragile          bool
 	Group            string
 	Placed           bool
+	PlacedDim        [3]float64 // cached dimensions after placement
 }
 
 // ItemOption configures optional fields on an Item.
@@ -143,6 +148,8 @@ type Bin struct {
 	Volume        float64
 	Items         []*Item
 	UnfittedItems []*Item
+	ItemWeight    float64 // tracked sum of item weights
+	ItemVolume    float64 // tracked sum of item volumes
 }
 
 // NewBin creates a new Bin with precalculated volume.
@@ -157,27 +164,39 @@ func NewBin(id string, w, h, d, maxWeight float64) *Bin {
 	}
 }
 
+// PlaceItem adds an item to the bin and updates tracked weight/volume.
+func (b *Bin) PlaceItem(item *Item) {
+	item.Placed = true
+	item.PlacedDim = item.Dimension()
+	b.Items = append(b.Items, item)
+	b.ItemWeight += item.Weight
+	b.ItemVolume += item.Volume
+}
+
+// RemoveLastItem removes the last placed item and updates tracked weight/volume.
+func (b *Bin) RemoveLastItem() *Item {
+	n := len(b.Items)
+	item := b.Items[n-1]
+	b.Items = b.Items[:n-1]
+	b.ItemWeight -= item.Weight
+	b.ItemVolume -= item.Volume
+	item.Placed = false
+	return item
+}
+
 // TotalWeight returns the sum of weights of all placed items.
 func (b *Bin) TotalWeight() float64 {
-	total := 0.0
-	for _, item := range b.Items {
-		total += item.Weight
-	}
-	return total
+	return b.ItemWeight
 }
 
 // RemainingWeight returns how much weight capacity is left.
 func (b *Bin) RemainingWeight() float64 {
-	return b.MaxWeight - b.TotalWeight()
+	return b.MaxWeight - b.ItemWeight
 }
 
 // UsedVolume returns the sum of volumes of all placed items.
 func (b *Bin) UsedVolume() float64 {
-	total := 0.0
-	for _, item := range b.Items {
-		total += item.Volume
-	}
-	return total
+	return b.ItemVolume
 }
 
 // VolumeUsedPct returns the percentage of bin volume occupied by items.

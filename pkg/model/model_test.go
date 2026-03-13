@@ -82,8 +82,7 @@ func TestBinWeightAndVolume(t *testing.T) {
 	}
 
 	item := NewItem("i1", 5, 5, 5, 10.0)
-	item.Placed = true
-	bin.Items = append(bin.Items, item)
+	bin.PlaceItem(item)
 
 	if bin.TotalWeight() != 10.0 {
 		t.Errorf("TotalWeight = %f, want 10", bin.TotalWeight())

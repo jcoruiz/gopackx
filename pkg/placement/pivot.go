@@ -13,6 +13,7 @@ var _ Engine = (*PivotEngine)(nil)
 type PivotEngine struct {
 	enableStability bool
 	supportRatio    float64
+	pivotBuf        [][3]float64 // reusable buffer for pivot generation
 }
 
 // PivotOption configures the PivotEngine.
@@ -41,25 +42,40 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	origPos := item.Position
 
 	pivots := e.generatePivots(bin)
+	rotations := rotation.AllowedFor(item)
+
+	// Pre-compute dimensions for each rotation (stack-allocated).
+	var dims [6][3]float64
+	for i, rt := range rotations {
+		dims[i] = rotation.DimensionsFor(item, rt)
+	}
+
+	bw, bh, bd := bin.Width+epsilon, bin.Height+epsilon, bin.Depth+epsilon
 
 	for _, pivot := range pivots {
-		for _, rt := range rotation.AllowedFor(item) {
+		for i, rt := range rotations {
+			dim := dims[i]
+
+			// Quick bounds rejection before function call.
+			if pivot[0]+dim[0] > bw || pivot[1]+dim[1] > bh || pivot[2]+dim[2] > bd {
+				continue
+			}
+
 			item.RotationType = rt
 			item.Position = pivot
 
-			if !canPlace(bin, item, e.enableStability, e.supportRatio) {
+			if !canPlaceDim(bin, item, dim, e.enableStability, e.supportRatio) {
 				continue
 			}
 
 			// Try fix-point correction for tighter packing.
 			savedPos := item.Position
-			fixPoint(bin, item)
-			if !canPlace(bin, item, e.enableStability, e.supportRatio) {
+			fixPointDim(bin, item, dim)
+			if !canPlaceDim(bin, item, dim, e.enableStability, e.supportRatio) {
 				item.Position = savedPos
 			}
 
-			item.Placed = true
-			bin.Items = append(bin.Items, item)
+			bin.PlaceItem(item)
 			return true
 		}
 	}
@@ -70,21 +86,23 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 }
 
 // generatePivots returns candidate positions from corners of placed items.
+// Uses a reusable buffer to avoid allocations.
 func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {
-	if len(bin.Items) == 0 {
-		return [][3]float64{{0, 0, 0}}
+	needed := 1 + 3*len(bin.Items)
+	if cap(e.pivotBuf) < needed {
+		e.pivotBuf = make([][3]float64, 0, needed*2)
 	}
+	e.pivotBuf = e.pivotBuf[:1]
+	e.pivotBuf[0] = [3]float64{0, 0, 0}
 
-	pivots := make([][3]float64, 1, 1+3*len(bin.Items))
-	pivots[0] = [3]float64{0, 0, 0}
 	for _, placed := range bin.Items {
 		dim := placed.Dimension()
-		pivots = append(pivots,
+		e.pivotBuf = append(e.pivotBuf,
 			[3]float64{placed.Position[0] + dim[0], placed.Position[1], placed.Position[2]},
 			[3]float64{placed.Position[0], placed.Position[1] + dim[1], placed.Position[2]},
 			[3]float64{placed.Position[0], placed.Position[1], placed.Position[2] + dim[2]},
 		)
 	}
-	return pivots
+	return e.pivotBuf
 }
 

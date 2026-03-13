@@ -26,20 +26,22 @@ func DimensionsFor(item *model.Item, rt model.RotationType) [3]float64 {
 	return Dimensions(item.Width, item.Height, item.Depth, rt)
 }
 
-// AllowedFor returns a copy of the effective allowed rotations for an item.
+// AllowedFor returns the effective allowed rotations for an item.
+// The returned slice must not be modified by the caller.
 func AllowedFor(item *model.Item) []model.RotationType {
-	src := item.AllowedRotations
-	if len(src) == 0 {
+	if len(item.AllowedRotations) == 0 {
 		return model.AllRotations()
 	}
-	out := make([]model.RotationType, len(src))
-	copy(out, src)
-	return out
+	return item.AllowedRotations
 }
 
 // IsAllowed checks if a rotation type is permitted for the item.
 func IsAllowed(item *model.Item, rt model.RotationType) bool {
-	for _, r := range AllowedFor(item) {
+	rots := item.AllowedRotations
+	if len(rots) == 0 {
+		return true // all rotations allowed
+	}
+	for _, r := range rots {
 		if r == rt {
 			return true
 		}

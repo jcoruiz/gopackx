@@ -106,8 +106,7 @@ func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 		item.Position = savedPos
 	}
 
-	item.Placed = true
-	bin.Items = append(bin.Items, item)
+	bin.PlaceItem(item)
 
 	e.onItemPlaced(item)
 	return true
