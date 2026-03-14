@@ -103,6 +103,84 @@ func TestSortBinsForItemWorstFit(t *testing.T) {
 	}
 }
 
+func TestSortBinsForItemBestFit3Bins(t *testing.T) {
+	bins := []*model.Bin{
+		model.NewBin("big", 100, 100, 100, 500),    // vol=1_000_000
+		model.NewBin("small", 30, 30, 30, 500),      // vol=27_000
+		model.NewBin("medium", 50, 50, 50, 500),     // vol=125_000
+	}
+	item := model.NewItem("i1", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, BestFit)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 bins, got %d", len(result))
+	}
+	// BestFit: ascending remaining volume → small, medium, big.
+	if result[0].ID != "small" || result[1].ID != "medium" || result[2].ID != "big" {
+		t.Errorf("BestFit 3 bins: expected small < medium < big, got %s < %s < %s",
+			result[0].ID, result[1].ID, result[2].ID)
+	}
+}
+
+func TestSortBinsForItemBestFit5Bins(t *testing.T) {
+	bins := []*model.Bin{
+		model.NewBin("e", 90, 90, 90, 500),
+		model.NewBin("a", 10, 10, 10, 500),
+		model.NewBin("d", 70, 70, 70, 500),
+		model.NewBin("b", 30, 30, 30, 500),
+		model.NewBin("c", 50, 50, 50, 500),
+	}
+	item := model.NewItem("i1", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, BestFit)
+	if len(result) != 5 {
+		t.Fatalf("expected 5 bins, got %d", len(result))
+	}
+	expected := []string{"a", "b", "c", "d", "e"}
+	for i, id := range expected {
+		if result[i].ID != id {
+			t.Errorf("BestFit 5 bins: position %d expected %s, got %s", i, id, result[i].ID)
+		}
+	}
+}
+
+func TestSortBinsForItemWorstFit3Bins(t *testing.T) {
+	bins := []*model.Bin{
+		model.NewBin("small", 30, 30, 30, 500),
+		model.NewBin("big", 100, 100, 100, 500),
+		model.NewBin("medium", 50, 50, 50, 500),
+	}
+	item := model.NewItem("i1", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, WorstFit)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 bins, got %d", len(result))
+	}
+	// WorstFit: descending remaining volume → big, medium, small.
+	if result[0].ID != "big" || result[1].ID != "medium" || result[2].ID != "small" {
+		t.Errorf("WorstFit 3 bins: expected big > medium > small, got %s > %s > %s",
+			result[0].ID, result[1].ID, result[2].ID)
+	}
+}
+
+func TestSortBinsForItemBestFitDecreasing3Bins(t *testing.T) {
+	bins := []*model.Bin{
+		model.NewBin("big", 100, 100, 100, 500),
+		model.NewBin("small", 30, 30, 30, 500),
+		model.NewBin("medium", 50, 50, 50, 500),
+	}
+	item := model.NewItem("i1", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, BestFitDecreasing)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 bins, got %d", len(result))
+	}
+	if result[0].ID != "small" || result[1].ID != "medium" || result[2].ID != "big" {
+		t.Errorf("BestFitDecreasing 3 bins: expected small < medium < big, got %s < %s < %s",
+			result[0].ID, result[1].ID, result[2].ID)
+	}
+}
+
 func TestSortBinsWeightFilter(t *testing.T) {
 	bin := model.NewBin("b1", 10, 10, 10, 5)
 	item := model.NewItem("heavy", 5, 5, 5, 10)

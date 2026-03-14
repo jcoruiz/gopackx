@@ -30,6 +30,7 @@ func ExampleSortBinsForItem() {
 	bins := []*model.Bin{
 		model.NewBin("big", 100, 100, 100, 500),
 		model.NewBin("small", 30, 30, 30, 500),
+		model.NewBin("medium", 50, 50, 50, 500),
 	}
 
 	item := model.NewItem("box", 10, 10, 10, 5)
@@ -41,6 +42,7 @@ func ExampleSortBinsForItem() {
 
 	// Output:
 	// small (remaining=27000)
+	// medium (remaining=125000)
 	// big (remaining=1000000)
 }
 

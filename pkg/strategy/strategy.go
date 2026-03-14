@@ -64,22 +64,17 @@ func SortBinsForItem(bins []*model.Bin, item *model.Item, st Type) []*model.Bin 
 
 	switch st {
 	case BestFit, BestFitDecreasing:
-		// Pre-compute remaining volume to avoid O(n) UsedVolume() per comparison.
-		remaining := make([]float64, len(candidates))
-		for i, b := range candidates {
-			remaining[i] = b.Volume - b.UsedVolume()
-		}
 		sort.SliceStable(candidates, func(i, j int) bool {
-			return remaining[i] < remaining[j]
+			ri := candidates[i].Volume - candidates[i].UsedVolume()
+			rj := candidates[j].Volume - candidates[j].UsedVolume()
+			return ri < rj
 		})
 
 	case WorstFit:
-		remaining := make([]float64, len(candidates))
-		for i, b := range candidates {
-			remaining[i] = b.Volume - b.UsedVolume()
-		}
 		sort.SliceStable(candidates, func(i, j int) bool {
-			return remaining[i] > remaining[j]
+			ri := candidates[i].Volume - candidates[i].UsedVolume()
+			rj := candidates[j].Volume - candidates[j].UsedVolume()
+			return ri > rj
 		})
 
 	case AlmostWorstFit:
@@ -92,12 +87,10 @@ func SortBinsForItem(bins []*model.Bin, item *model.Item, st Type) []*model.Bin 
 		if len(filtered) == 0 {
 			filtered = candidates
 		}
-		remaining := make([]float64, len(filtered))
-		for i, b := range filtered {
-			remaining[i] = b.Volume - b.UsedVolume()
-		}
 		sort.SliceStable(filtered, func(i, j int) bool {
-			return remaining[i] > remaining[j]
+			ri := filtered[i].Volume - filtered[i].UsedVolume()
+			rj := filtered[j].Volume - filtered[j].UsedVolume()
+			return ri > rj
 		})
 		candidates = filtered
 
