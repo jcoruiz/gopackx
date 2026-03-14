@@ -68,3 +68,25 @@ func ExampleNewLAFFEngine() {
 	// Items in bin: 2
 	// Item A position: [0 0 0]
 }
+
+func ExampleNewMaxRectsEngine() {
+	engine := placement.NewMaxRectsEngine(
+		placement.WithMaxRectsStability(0.7),
+	)
+
+	bin := model.NewBin("bin-1", 100, 100, 100, 500)
+	a := model.NewItem("a", 50, 50, 50, 10)
+	b := model.NewItem("b", 50, 50, 50, 10)
+
+	engine.PlaceItem(bin, a)
+	engine.PlaceItem(bin, b)
+
+	fmt.Printf("Items in bin: %d\n", len(bin.Items))
+	fmt.Printf("Item A position: %v\n", a.Position)
+	fmt.Printf("Item B position: %v\n", b.Position)
+
+	// Output:
+	// Items in bin: 2
+	// Item A position: [0 0 0]
+	// Item B position: [50 0 0]
+}

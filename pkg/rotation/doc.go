@@ -22,9 +22,9 @@
 //
 // # Allowed Rotations
 //
-// [AllowedFor] returns a copy of the effective allowed rotations for an item.
+// [AllowedFor] returns the effective allowed rotations for an item.
 // If the item has no explicit allowed rotations set, it defaults to all 6
-// rotations.
+// rotations. The returned slice must not be modified by the caller.
 //
 // [IsAllowed] checks whether a specific rotation type is permitted for an item.
 package rotation

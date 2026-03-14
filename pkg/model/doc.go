@@ -30,6 +30,12 @@
 // applying the item's current rotation. This accounts for the permutation defined
 // by the active [RotationType].
 //
+// # Axes
+//
+// The [Axis] type represents a spatial axis and is used by the intersection
+// package to project items onto 2D planes. The three constants are [WidthAxis],
+// [HeightAxis], and [DepthAxis].
+//
 // # Rotation Types
 //
 // There are 6 possible orientations for a rectangular item, represented by

@@ -8,7 +8,7 @@
 //
 // # Engines
 //
-// Three placement engines are provided, each with different trade-offs:
+// Four placement engines are provided, each with different trade-offs:
 //
 // [PivotEngine] generates candidate positions from the corners of already-placed
 // items (pivot points). It tries each pivot with every allowed rotation and
@@ -40,6 +40,16 @@
 //	engine := placement.NewLAFFEngine(
 //	    placement.WithLAFFStability(0.6),
 //	    placement.LAFFFast(), // 2D-only within levels
+//	)
+//
+// [MaxRectsEngine] maintains a list of maximal free cuboids within the bin.
+// When placing an item it selects the free space with the best score (lowest Y,
+// then shortest side fit), applies gravity to drop the item to the lowest valid
+// position, and splits the remaining free spaces. This engine tends to produce
+// very dense, gravity-settled packings.
+//
+//	engine := placement.NewMaxRectsEngine(
+//	    placement.WithMaxRectsStability(0.7),
 //	)
 //
 // # Common Features
