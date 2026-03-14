@@ -28,6 +28,9 @@ func cloneBinEmpty(bin *model.Bin) *model.Bin {
 	c := *bin
 	c.Items = nil
 	c.UnfittedItems = nil
+	c.AABBData = nil
+	c.HasFragile = false
+	c.FragileIdxs = nil
 	c.ItemWeight = 0
 	c.ItemVolume = 0
 	return &c
@@ -42,6 +45,14 @@ func snapshotBin(bin *model.Bin) *model.Bin {
 		cp.AllowedRotations = make([]model.RotationType, len(item.AllowedRotations))
 		copy(cp.AllowedRotations, item.AllowedRotations)
 		c.Items[i] = &cp
+	}
+	if len(bin.AABBData) > 0 {
+		c.AABBData = make([]float64, len(bin.AABBData))
+		copy(c.AABBData, bin.AABBData)
+	}
+	if len(bin.FragileIdxs) > 0 {
+		c.FragileIdxs = make([]int, len(bin.FragileIdxs))
+		copy(c.FragileIdxs, bin.FragileIdxs)
 	}
 	c.UnfittedItems = nil
 	return &c

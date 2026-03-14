@@ -9,11 +9,10 @@ import (
 var _ Engine = (*PivotEngine)(nil)
 
 // PivotEngine places items using pivot points generated from corners of placed items.
-// After placement, fix-point correction pushes items toward the origin to eliminate gaps.
 type PivotEngine struct {
 	enableStability bool
 	supportRatio    float64
-	pivotBuf        [][3]float64 // reusable buffer for pivot generation
+	pivotBuf        [][3]float64
 }
 
 // PivotOption configures the PivotEngine.
@@ -44,35 +43,89 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	pivots := e.generatePivots(bin)
 	rotations := rotation.AllowedFor(item)
 
-	// Pre-compute dimensions for each rotation (stack-allocated).
-	var dims [6][3]float64
-	for i, rt := range rotations {
-		dims[i] = rotation.DimensionsFor(item, rt)
+	// Pre-compute dimensions for each rotation and dedup identical dimensions.
+	type rotDim struct {
+		rt  model.RotationType
+		dim [3]float64
+	}
+	var rds [6]rotDim
+	nRot := 0
+	for _, rt := range rotations {
+		dim := rotation.DimensionsFor(item, rt)
+		dup := false
+		for j := 0; j < nRot; j++ {
+			if rds[j].dim == dim {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			rds[nRot] = rotDim{rt, dim}
+			nRot++
+		}
 	}
 
 	bw, bh, bd := bin.Width+epsilon, bin.Height+epsilon, bin.Depth+epsilon
+	stab := e.enableStability
+	ratio := e.supportRatio
+
+	// Conflict-driven rejection: track recent blockers' AABBs on stack.
+	data := bin.AABBData
+	const maxBlockers = 4
+	var blockers [maxBlockers][6]float64
+	nBlockers := 0
+	writeIdx := 0
 
 	for _, pivot := range pivots {
-		for i, rt := range rotations {
-			dim := dims[i]
+		for ri := 0; ri < nRot; ri++ {
+			dim := rds[ri].dim
 
-			// Quick bounds rejection before function call.
-			if pivot[0]+dim[0] > bw || pivot[1]+dim[1] > bh || pivot[2]+dim[2] > bd {
+			px1 := pivot[0] + dim[0]
+			py1 := pivot[1] + dim[1]
+			pz1 := pivot[2] + dim[2]
+			if px1 > bw || py1 > bh || pz1 > bd {
 				continue
 			}
 
-			item.RotationType = rt
+			// Conflict-driven pre-rejection from stack-cached blockers.
+			blocked := false
+			for bi := 0; bi < nBlockers; bi++ {
+				b := &blockers[bi]
+				if pivot[0] < b[3]-epsilon && b[0] < px1-epsilon &&
+					pivot[1] < b[4]-epsilon && b[1] < py1-epsilon &&
+					pivot[2] < b[5]-epsilon && b[2] < pz1-epsilon {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
+				continue
+			}
+
+			item.RotationType = rds[ri].rt
 			item.Position = pivot
 
-			if !canPlaceDim(bin, item, dim, e.enableStability, e.supportRatio) {
+			blocker := canPlaceDimBlocker(bin, item, dim, stab, ratio)
+			if blocker >= 0 {
+				off := blocker * 6
+				blockers[writeIdx] = [6]float64{data[off], data[off+1], data[off+2], data[off+3], data[off+4], data[off+5]}
+				writeIdx = (writeIdx + 1) & (maxBlockers - 1)
+				if nBlockers < maxBlockers {
+					nBlockers++
+				}
+				continue
+			}
+			if blocker == -2 {
 				continue
 			}
 
-			// Try fix-point correction for tighter packing.
+			// Success! Try fix-point correction.
 			savedPos := item.Position
 			fixPointDim(bin, item, dim)
-			if !canPlaceDim(bin, item, dim, e.enableStability, e.supportRatio) {
-				item.Position = savedPos
+			if item.Position != savedPos {
+				if !canPlaceDim(bin, item, dim, stab, ratio) {
+					item.Position = savedPos
+				}
 			}
 
 			bin.PlaceItem(item)
@@ -86,7 +139,6 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 }
 
 // generatePivots returns candidate positions from corners of placed items.
-// Uses a reusable buffer to avoid allocations.
 func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {
 	needed := 1 + 3*len(bin.Items)
 	if cap(e.pivotBuf) < needed {
@@ -96,13 +148,12 @@ func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {
 	e.pivotBuf[0] = [3]float64{0, 0, 0}
 
 	for _, placed := range bin.Items {
-		dim := placed.Dimension()
+		d := placed.PlacedDim
 		e.pivotBuf = append(e.pivotBuf,
-			[3]float64{placed.Position[0] + dim[0], placed.Position[1], placed.Position[2]},
-			[3]float64{placed.Position[0], placed.Position[1] + dim[1], placed.Position[2]},
-			[3]float64{placed.Position[0], placed.Position[1], placed.Position[2] + dim[2]},
+			[3]float64{placed.Position[0] + d[0], placed.Position[1], placed.Position[2]},
+			[3]float64{placed.Position[0], placed.Position[1] + d[1], placed.Position[2]},
+			[3]float64{placed.Position[0], placed.Position[1], placed.Position[2] + d[2]},
 		)
 	}
 	return e.pivotBuf
 }
-

@@ -150,6 +150,12 @@ type Bin struct {
 	UnfittedItems []*Item
 	ItemWeight    float64 // tracked sum of item weights
 	ItemVolume    float64 // tracked sum of item volumes
+
+	// Contiguous AABB data for cache-friendly hot-loop access.
+	// Layout: [x0, y0, z0, x1, y1, z1, ...] (6 float64 per item)
+	AABBData    []float64
+	HasFragile  bool
+	FragileIdxs []int // indices of fragile items (only populated when needed)
 }
 
 // NewBin creates a new Bin with precalculated volume.
@@ -167,10 +173,19 @@ func NewBin(id string, w, h, d, maxWeight float64) *Bin {
 // PlaceItem adds an item to the bin and updates tracked weight/volume.
 func (b *Bin) PlaceItem(item *Item) {
 	item.Placed = true
-	item.PlacedDim = item.Dimension()
+	dim := item.Dimension()
+	item.PlacedDim = dim
 	b.Items = append(b.Items, item)
+	b.AABBData = append(b.AABBData,
+		item.Position[0], item.Position[1], item.Position[2],
+		item.Position[0]+dim[0], item.Position[1]+dim[1], item.Position[2]+dim[2],
+	)
 	b.ItemWeight += item.Weight
 	b.ItemVolume += item.Volume
+	if item.Fragile {
+		b.HasFragile = true
+		b.FragileIdxs = append(b.FragileIdxs, len(b.Items)-1)
+	}
 }
 
 // RemoveLastItem removes the last placed item and updates tracked weight/volume.
@@ -178,9 +193,14 @@ func (b *Bin) RemoveLastItem() *Item {
 	n := len(b.Items)
 	item := b.Items[n-1]
 	b.Items = b.Items[:n-1]
+	b.AABBData = b.AABBData[:n*6-6]
 	b.ItemWeight -= item.Weight
 	b.ItemVolume -= item.Volume
 	item.Placed = false
+	if item.Fragile && len(b.FragileIdxs) > 0 {
+		b.FragileIdxs = b.FragileIdxs[:len(b.FragileIdxs)-1]
+		b.HasFragile = len(b.FragileIdxs) > 0
+	}
 	return item
 }
 
