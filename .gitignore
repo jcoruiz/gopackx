@@ -20,6 +20,7 @@ go.work.sum
 .vscode/
 *.swp
 *.swo
+.claude/
 
 # OS
 .DS_Store
@@ -28,3 +29,18 @@ Thumbs.db
 # Build
 /bin/
 /dist/
+
+# Compiled example binaries
+/basic
+/constraints
+/engines
+/multi-bin
+/solver
+/stability
+/strategies
+
+# Benchmark artifacts
+benchmark/go_bench/bench_runner
+benchmark/go_bench/gopackx-benchmark.test
+benchmark/python_bench/venv/
+benchmarks/rust_bench/target/
