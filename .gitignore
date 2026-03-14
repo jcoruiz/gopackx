@@ -38,9 +38,3 @@ Thumbs.db
 /solver
 /stability
 /strategies
-
-# Benchmark artifacts
-benchmark/go_bench/bench_runner
-benchmark/go_bench/gopackx-benchmark.test
-benchmark/python_bench/venv/
-benchmarks/rust_bench/target/
