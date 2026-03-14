@@ -181,6 +181,64 @@ func TestSortBinsForItemBestFitDecreasing3Bins(t *testing.T) {
 	}
 }
 
+func TestSortBinsForItemAlmostWorstFit(t *testing.T) {
+	// AlmostWorstFit skips bins that are >80% empty (usage < 20%).
+	// Create bins with different fill levels.
+	almostEmpty := model.NewBin("almost-empty", 100, 100, 100, 500) // 0% used
+	partiallyFilled := model.NewBin("partial", 50, 50, 50, 500)     // will place items
+	full := model.NewBin("full", 20, 20, 20, 500)                   // will place items
+
+	// Fill "partial" to ~50% usage.
+	for i := 0; i < 4; i++ {
+		filler := model.NewItem("f", 25, 25, 25, 1)
+		filler.Position = [3]float64{float64(i%2) * 25, 0, float64(i/2) * 25}
+		partiallyFilled.PlaceItem(filler)
+	}
+
+	// Fill "full" to ~50%.
+	filler := model.NewItem("f", 20, 10, 20, 1)
+	filler.Position = [3]float64{0, 0, 0}
+	full.PlaceItem(filler)
+
+	bins := []*model.Bin{almostEmpty, partiallyFilled, full}
+	item := model.NewItem("box", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, AlmostWorstFit)
+
+	// Almost-empty bin (0% usage < 20%) should be skipped if there are others.
+	// The other bins (>20% usage) should be sorted by most remaining first.
+	if len(result) < 1 {
+		t.Fatal("expected at least 1 bin")
+	}
+	// almostEmpty should be excluded (usage = 0% < 20%, and it has 0 items).
+	// Actually, bins with 0 items are included (len(b.Items) == 0 passes the check).
+	// Only bins with items AND usage < 20% are skipped.
+	for _, b := range result {
+		if len(b.Items) > 0 && b.VolumeUsedPct() < 20 {
+			t.Errorf("AlmostWorstFit should skip bins with items and usage < 20%%, got %s at %.1f%%",
+				b.ID, b.VolumeUsedPct())
+		}
+	}
+}
+
+func TestSortBinsForItemAlmostWorstFitAllEmpty(t *testing.T) {
+	// When all bins are empty/near-empty, fallback to using all candidates.
+	bins := []*model.Bin{
+		model.NewBin("a", 100, 100, 100, 500),
+		model.NewBin("b", 50, 50, 50, 500),
+	}
+	item := model.NewItem("box", 5, 5, 5, 1)
+
+	result := SortBinsForItem(bins, item, AlmostWorstFit)
+	if len(result) != 2 {
+		t.Errorf("expected 2 bins (fallback to all), got %d", len(result))
+	}
+	// Should be sorted by most remaining first.
+	if result[0].ID != "a" {
+		t.Errorf("expected 'a' first (most remaining), got %s", result[0].ID)
+	}
+}
+
 func TestSortBinsWeightFilter(t *testing.T) {
 	bin := model.NewBin("b1", 10, 10, 10, 5)
 	item := model.NewItem("heavy", 5, 5, 5, 10)

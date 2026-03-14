@@ -71,6 +71,115 @@ func TestItemDimension(t *testing.T) {
 	}
 }
 
+func TestItemAllowedRotations(t *testing.T) {
+	rots := []RotationType{RotationWHD, RotationDHW}
+	item := NewItem("custom", 10, 20, 30, 5, ItemAllowedRotations(rots))
+
+	if len(item.AllowedRotations) != 2 {
+		t.Fatalf("AllowedRotations count = %d, want 2", len(item.AllowedRotations))
+	}
+	if item.AllowedRotations[0] != RotationWHD || item.AllowedRotations[1] != RotationDHW {
+		t.Errorf("AllowedRotations = %v, want [WHD, DHW]", item.AllowedRotations)
+	}
+
+	// Verify it's a copy (modifying original doesn't affect item).
+	rots[0] = RotationHDW
+	if item.AllowedRotations[0] != RotationWHD {
+		t.Error("ItemAllowedRotations should copy the slice, not reference it")
+	}
+}
+
+func TestRemoveLastItem(t *testing.T) {
+	bin := NewBin("box", 20, 20, 20, 100)
+
+	a := NewItem("a", 10, 10, 10, 5)
+	b := NewItem("b", 10, 10, 10, 8, ItemFragile())
+
+	bin.PlaceItem(a)
+	bin.PlaceItem(b)
+
+	if len(bin.Items) != 2 {
+		t.Fatalf("Items count = %d, want 2", len(bin.Items))
+	}
+	if bin.TotalWeight() != 13 {
+		t.Errorf("TotalWeight = %f, want 13", bin.TotalWeight())
+	}
+	if !bin.HasFragile {
+		t.Error("expected HasFragile = true")
+	}
+
+	removed := bin.RemoveLastItem()
+	if removed.ID != "b" {
+		t.Errorf("removed ID = %q, want %q", removed.ID, "b")
+	}
+	if removed.Placed {
+		t.Error("removed item should have Placed = false")
+	}
+	if len(bin.Items) != 1 {
+		t.Errorf("Items count = %d, want 1", len(bin.Items))
+	}
+	if bin.TotalWeight() != 5 {
+		t.Errorf("TotalWeight = %f, want 5", bin.TotalWeight())
+	}
+	if bin.HasFragile {
+		t.Error("HasFragile should be false after removing only fragile item")
+	}
+	if len(bin.AABBData) != 6 {
+		t.Errorf("AABBData len = %d, want 6", len(bin.AABBData))
+	}
+
+	// Remove last remaining item.
+	removed = bin.RemoveLastItem()
+	if removed.ID != "a" {
+		t.Errorf("removed ID = %q, want %q", removed.ID, "a")
+	}
+	if len(bin.Items) != 0 {
+		t.Errorf("Items count = %d, want 0", len(bin.Items))
+	}
+	if bin.TotalWeight() != 0 {
+		t.Errorf("TotalWeight = %f, want 0", bin.TotalWeight())
+	}
+	if bin.UsedVolume() != 0 {
+		t.Errorf("UsedVolume = %f, want 0", bin.UsedVolume())
+	}
+}
+
+func TestVolumeUsedPctZeroVolumeBin(t *testing.T) {
+	bin := NewBin("flat", 0, 10, 10, 100)
+	if pct := bin.VolumeUsedPct(); pct != 0 {
+		t.Errorf("VolumeUsedPct = %f, want 0 for zero-volume bin", pct)
+	}
+}
+
+func TestPlaceItemFragileTracking(t *testing.T) {
+	bin := NewBin("box", 30, 30, 30, 100)
+
+	normal := NewItem("n", 10, 10, 10, 1)
+	f1 := NewItem("f1", 10, 10, 10, 1, ItemFragile())
+	f2 := NewItem("f2", 10, 10, 10, 1, ItemFragile())
+
+	bin.PlaceItem(normal)
+	if bin.HasFragile {
+		t.Error("HasFragile should be false with no fragile items")
+	}
+
+	bin.PlaceItem(f1)
+	bin.PlaceItem(f2)
+	if len(bin.FragileIdxs) != 2 {
+		t.Errorf("FragileIdxs = %v, want 2 entries", bin.FragileIdxs)
+	}
+
+	bin.RemoveLastItem() // remove f2
+	if len(bin.FragileIdxs) != 1 {
+		t.Errorf("FragileIdxs = %v, want 1 entry after removing f2", bin.FragileIdxs)
+	}
+
+	bin.RemoveLastItem() // remove f1
+	if bin.HasFragile {
+		t.Error("HasFragile should be false after removing all fragile items")
+	}
+}
+
 func TestBinWeightAndVolume(t *testing.T) {
 	bin := NewBin("box", 10, 10, 10, 50.0)
 

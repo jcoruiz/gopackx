@@ -219,25 +219,6 @@ func overlapLen(pos1, len1, pos2, len2 float64) float64 {
 	return end - start
 }
 
-// canPlaceStability checks only the stability constraints.
-func canPlaceStability(bin *model.Bin, item *model.Item, supportRatio float64) bool {
-	if !stability.CheckSupport(item, bin.Items, supportRatio) {
-		return false
-	}
-	bin.Items = append(bin.Items, item)
-	for _, placed := range bin.Items {
-		if placed == item {
-			continue
-		}
-		if !stability.CheckLoadBearing(placed, bin.Items) {
-			bin.Items = bin.Items[:len(bin.Items)-1]
-			return false
-		}
-	}
-	bin.Items = bin.Items[:len(bin.Items)-1]
-	return true
-}
-
 // fixPoint corrects item position on each axis to eliminate floating gaps.
 func fixPoint(bin *model.Bin, item *model.Item) {
 	fixPointDim(bin, item, item.Dimension())
