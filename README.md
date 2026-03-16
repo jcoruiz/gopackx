@@ -1,5 +1,10 @@
 # GoPackX
 
+[![CI](https://github.com/jcoruiz/gopackx/actions/workflows/ci.yml/badge.svg)](https://github.com/jcoruiz/gopackx/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jcoruiz/gopackx)](https://goreportcard.com/report/github.com/jcoruiz/gopackx)
+[![codecov](https://codecov.io/gh/jcoruiz/gopackx/branch/main/graph/badge.svg)](https://codecov.io/gh/jcoruiz/gopackx)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jcoruiz/gopackx.svg)](https://pkg.go.dev/github.com/jcoruiz/gopackx)
+
 A high-performance 3D bin packing library for Go with variable-sized box selection and cross-bin optimization. GoPackX solves the problem of fitting items into containers optimally, considering dimensions, weight, cost, rotations, stability, and physical constraints.
 
 ## Features
