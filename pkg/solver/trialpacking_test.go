@@ -166,7 +166,7 @@ func TestTrialPacking_WeightConstraint(t *testing.T) {
 	tp := NewTrialPacking(newPivot)
 
 	binTypes := []*model.Bin{
-		model.NewBin("light-box", 50, 50, 50, 5),  // max 5 kg
+		model.NewBin("light-box", 50, 50, 50, 5),   // max 5 kg
 		model.NewBin("heavy-box", 50, 50, 50, 100), // max 100 kg
 	}
 
@@ -319,7 +319,7 @@ func TestTrialPacking_CostRespectsWeight(t *testing.T) {
 	tp := NewTrialPacking(newPivot, WithLookahead())
 
 	binTypes := []*model.Bin{
-		model.NewBin("cheap-weak", 50, 50, 50, 3, model.BinCost(10)),    // max 3 kg
+		model.NewBin("cheap-weak", 50, 50, 50, 3, model.BinCost(10)),        // max 3 kg
 		model.NewBin("expensive-strong", 50, 50, 50, 50, model.BinCost(80)), // max 50 kg
 	}
 

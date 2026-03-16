@@ -171,7 +171,7 @@ func TestBBFullDFS(t *testing.T) {
 
 	bins := []*model.Bin{model.NewBin("box", 10, 10, 10, 1000)}
 	items := []*model.Item{
-		model.NewItem("big", 8, 8, 8, 1),     // greedy places this first, blocks others
+		model.NewItem("big", 8, 8, 8, 1), // greedy places this first, blocks others
 		model.NewItem("s1", 5, 5, 5, 1),
 		model.NewItem("s2", 5, 5, 5, 1),
 		model.NewItem("s3", 5, 5, 5, 1),

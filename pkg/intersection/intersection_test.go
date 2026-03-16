@@ -8,11 +8,11 @@ import (
 
 func TestRectIntersect(t *testing.T) {
 	tests := []struct {
-		name string
-		i1   *model.Item
-		i2   *model.Item
+		name         string
+		i1           *model.Item
+		i2           *model.Item
 		axis1, axis2 model.Axis
-		want bool
+		want         bool
 	}{
 		{
 			name:  "overlapping on WH",

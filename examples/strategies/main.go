@@ -74,7 +74,7 @@ func runStrategy(st strategy.Type) *model.Result {
 
 	// A mix of items.
 	items := []struct {
-		id string
+		id          string
 		w, h, d, wt float64
 	}{
 		{"pkg-01", 30, 25, 20, 10},

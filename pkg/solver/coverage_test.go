@@ -118,7 +118,7 @@ func TestCoverage_ShakeChangeType_Downsize(t *testing.T) {
 	}
 	binTypes := []*model.Bin{
 		model.NewBin("small", 15, 15, 15, 100),  // volume 3375
-		model.NewBin("large", 30, 30, 30, 1000),  // volume 27000
+		model.NewBin("large", 30, 30, 30, 1000), // volume 27000
 	}
 
 	sol := &solution{
@@ -189,7 +189,7 @@ func TestCoverage_ShakeChangeType_WeightDontFit(t *testing.T) {
 		model.NewItem("heavy", 10, 10, 10, 50), // 50 kg
 	}
 	binTypes := []*model.Bin{
-		model.NewBin("small", 15, 15, 15, 10),   // max 10 kg
+		model.NewBin("small", 15, 15, 15, 10), // max 10 kg
 		model.NewBin("large", 30, 30, 30, 1000),
 	}
 
@@ -1368,8 +1368,8 @@ func TestCoverage_BranchBound_Full_ContextCancel(t *testing.T) {
 func TestCoverage_ShakeSwap_Success(t *testing.T) {
 	// Create a scenario where swapping items between bins is valid.
 	items := []*model.Item{
-		model.NewItem("big", 15, 15, 15, 1),   // bin 0
-		model.NewItem("small", 5, 5, 5, 1),     // bin 1
+		model.NewItem("big", 15, 15, 15, 1), // bin 0
+		model.NewItem("small", 5, 5, 5, 1),  // bin 1
 	}
 	binTypes := []*model.Bin{model.NewBin("box", 30, 30, 30, 1000)}
 
@@ -1390,9 +1390,9 @@ func TestCoverage_ShakeSwap_Success(t *testing.T) {
 func TestCoverage_ShakeSwap_WeightViolation(t *testing.T) {
 	// Swap would violate weight constraints.
 	items := []*model.Item{
-		model.NewItem("heavy", 5, 5, 5, 9),   // bin 0
-		model.NewItem("light", 5, 5, 5, 1),   // bin 1
-		model.NewItem("anchor", 5, 5, 5, 9),  // bin 1
+		model.NewItem("heavy", 5, 5, 5, 9),  // bin 0
+		model.NewItem("light", 5, 5, 5, 1),  // bin 1
+		model.NewItem("anchor", 5, 5, 5, 9), // bin 1
 	}
 	binTypes := []*model.Bin{model.NewBin("box", 30, 30, 30, 10)} // max 10kg
 
@@ -1414,8 +1414,8 @@ func TestCoverage_ShakeSwap_WeightViolation(t *testing.T) {
 func TestCoverage_ShakeSwap_VolumeViolation(t *testing.T) {
 	// Swap would violate volume constraints.
 	items := []*model.Item{
-		model.NewItem("big", 28, 28, 28, 1),  // bin 0 - vol ~21952
-		model.NewItem("tiny", 2, 2, 2, 1),    // bin 1
+		model.NewItem("big", 28, 28, 28, 1), // bin 0 - vol ~21952
+		model.NewItem("tiny", 2, 2, 2, 1),   // bin 1
 	}
 	binTypes := []*model.Bin{model.NewBin("box", 29, 29, 29, 1000)} // vol 24389
 
@@ -2051,9 +2051,9 @@ func TestCoverage_Parallel_NilResults(t *testing.T) {
 func TestCoverage_ShakeSwap_VolumeFails(t *testing.T) {
 	// Two items in separate bins; swapping would exceed volume in one.
 	items := []*model.Item{
-		model.NewItem("big", 28, 28, 28, 1),   // vol = 21952, bin 0
-		model.NewItem("small", 2, 2, 2, 1),     // vol = 8, bin 1
-		model.NewItem("fill", 27, 27, 27, 1),   // vol = 19683, bin 1
+		model.NewItem("big", 28, 28, 28, 1),  // vol = 21952, bin 0
+		model.NewItem("small", 2, 2, 2, 1),   // vol = 8, bin 1
+		model.NewItem("fill", 27, 27, 27, 1), // vol = 19683, bin 1
 	}
 	binTypes := []*model.Bin{model.NewBin("box", 29, 29, 29, 1000)} // vol = 24389
 
@@ -2316,8 +2316,8 @@ func TestCoverage_DfsFull_CountPruning(t *testing.T) {
 func TestCoverage_ShakeSwap_WeightCheckFails(t *testing.T) {
 	// 2 items in 2 bins. Swapping would violate weight constraint.
 	items := []*model.Item{
-		model.NewItem("light", 5, 5, 5, 1),  // bin 0, 1kg
-		model.NewItem("heavy", 5, 5, 5, 9),  // bin 1, 9kg
+		model.NewItem("light", 5, 5, 5, 1), // bin 0, 1kg
+		model.NewItem("heavy", 5, 5, 5, 9), // bin 1, 9kg
 	}
 	// Bin 0 has another heavy item.
 	items = append(items, model.NewItem("anchor", 5, 5, 5, 9)) // bin 0, 9kg

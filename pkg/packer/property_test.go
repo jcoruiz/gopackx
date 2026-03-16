@@ -54,13 +54,13 @@ var strategies = []strategy.Type{
 
 func strategyName(st strategy.Type) string {
 	names := map[strategy.Type]string{
-		strategy.MinimizeBins:     "MinimizeBins",
-		strategy.Greedy:           "Greedy",
-		strategy.BestFit:          "BestFit",
+		strategy.MinimizeBins:      "MinimizeBins",
+		strategy.Greedy:            "Greedy",
+		strategy.BestFit:           "BestFit",
 		strategy.BestFitDecreasing: "BestFitDecreasing",
-		strategy.NextFit:          "NextFit",
-		strategy.WorstFit:         "WorstFit",
-		strategy.AlmostWorstFit:   "AlmostWorstFit",
+		strategy.NextFit:           "NextFit",
+		strategy.WorstFit:          "WorstFit",
+		strategy.AlmostWorstFit:    "AlmostWorstFit",
 	}
 	return names[st]
 }
@@ -664,7 +664,7 @@ func TestCrossEngine_AllProduceValidPackings(t *testing.T) {
 
 		// Generate items once, reuse across engines.
 		type itemSpec struct {
-			id     string
+			id          string
 			w, h, d, wt float64
 		}
 		specs := make([]itemSpec, nItems)

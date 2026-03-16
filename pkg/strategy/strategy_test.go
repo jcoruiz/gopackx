@@ -105,9 +105,9 @@ func TestSortBinsForItemWorstFit(t *testing.T) {
 
 func TestSortBinsForItemBestFit3Bins(t *testing.T) {
 	bins := []*model.Bin{
-		model.NewBin("big", 100, 100, 100, 500),    // vol=1_000_000
-		model.NewBin("small", 30, 30, 30, 500),      // vol=27_000
-		model.NewBin("medium", 50, 50, 50, 500),     // vol=125_000
+		model.NewBin("big", 100, 100, 100, 500), // vol=1_000_000
+		model.NewBin("small", 30, 30, 30, 500),  // vol=27_000
+		model.NewBin("medium", 50, 50, 50, 500), // vol=125_000
 	}
 	item := model.NewItem("i1", 5, 5, 5, 1)
 

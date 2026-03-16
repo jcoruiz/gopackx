@@ -12,13 +12,13 @@ import (
 type Type int
 
 const (
-	MinimizeBins     Type = iota // Vol desc, First Fit
-	Greedy                       // Vol asc, First Fit
-	BestFit                      // Vol asc, Best Fit (smallest remaining)
-	BestFitDecreasing            // Vol desc, Best Fit
-	NextFit                      // Vol asc, current bin only
-	WorstFit                     // Vol asc, Worst Fit (largest remaining)
-	AlmostWorstFit               // Vol asc, Worst Fit skipping >80% empty
+	MinimizeBins      Type = iota // Vol desc, First Fit
+	Greedy                        // Vol asc, First Fit
+	BestFit                       // Vol asc, Best Fit (smallest remaining)
+	BestFitDecreasing             // Vol desc, Best Fit
+	NextFit                       // Vol asc, current bin only
+	WorstFit                      // Vol asc, Worst Fit (largest remaining)
+	AlmostWorstFit                // Vol asc, Worst Fit skipping >80% empty
 )
 
 // SortItems sorts items according to the strategy's multi-criteria ordering:

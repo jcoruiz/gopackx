@@ -9,7 +9,7 @@ import (
 
 func ExampleSortItems() {
 	items := []*model.Item{
-		model.NewItem("small", 5, 5, 5, 1),   // volume=125
+		model.NewItem("small", 5, 5, 5, 1),    // volume=125
 		model.NewItem("large", 20, 20, 20, 8), // volume=8000
 		model.NewItem("mid", 10, 10, 10, 3),   // volume=1000
 	}
