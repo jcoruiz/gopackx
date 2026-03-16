@@ -5,6 +5,47 @@
 // bins, and a set of items, returning a [model.Result] with the best packing
 // found within the time budget.
 //
+// For most use cases, the top-level [github.com/jcoruiz/gopackx.Pack] function
+// is the simplest entry point. Use this package directly when you need
+// fine-grained control over solver parameters.
+//
+// # TrialPacking (Variable-Sized Bin Packing)
+//
+// The [TrialPacking] solver addresses the Variable-Sized Bin Packing Problem
+// (VSBPP): given multiple box types, select which types to use and how many of
+// each, minimizing total boxes. It treats bins as templates and creates
+// instances as needed.
+//
+// When a new bin is needed, it runs the actual placement engine on a temporary
+// copy of each candidate bin type, measuring how many items really fit (not
+// just volume estimates). It then picks the type with the best fill ratio.
+//
+//	tp := solver.NewTrialPacking(func() placement.Engine {
+//	    return placement.NewPivotEngine()
+//	})
+//	result, err := tp.Solve(ctx, binTypes, items)
+//
+// Enable lookahead (Level 4) to also estimate how many future bins will be
+// needed, leading to better global decisions:
+//
+//	tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
+//
+// # Metaheuristic (Cross-Bin Optimization)
+//
+// The [Metaheuristic] solver uses Variable Neighborhood Search (VNS) to
+// redistribute items across bins after an initial packing. It can find
+// solutions that greedy approaches miss by trying MOVE, SWAP, REPACK, and
+// CHANGE_TYPE operations, each validated with the real 3D placement engine.
+//
+//	m := solver.NewMetaheuristic(func() placement.Engine {
+//	    return placement.NewPivotEngine()
+//	})
+//	result, err := m.Solve(ctx, binTypes, items)
+//
+// The metaheuristic starts from a TrialPacking seed and iteratively improves
+// it. It is slower (~30ms for 17 items) but can reduce bin count beyond what
+// greedy approaches achieve.
+//
 // # BranchBound
 //
 // The [BranchBound] solver exhaustively searches for the item ordering that

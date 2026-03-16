@@ -8,7 +8,96 @@ type Solver interface {
 }
 ```
 
-GoPackX provides two solvers: **Branch & Bound** for optimal single-bin packing, and **Parallel** for concurrent multi-configuration search.
+GoPackX provides four solvers:
+
+| Solver | Use Case | Speed | Quality |
+|---|---|---|---|
+| **TrialPacking** | Variable-sized bin packing (VSBPP) | Fast (~100µs) | Good |
+| **Metaheuristic** | Cross-bin optimization (VSBPP) | Moderate (~30ms) | Best |
+| **Branch & Bound** | Optimal single-bin packing | Varies | Optimal (small sets) |
+| **Parallel** | Concurrent multi-configuration search | Fast | Good |
+
+For most use cases, the top-level `gopackx.Pack()` function selects the right solver automatically:
+
+```go
+import "github.com/jcoruiz/gopackx"
+
+// Fast (TrialPacking with lookahead)
+result, err := gopackx.Pack(ctx, boxTypes, items)
+
+// Optimized (Metaheuristic — fewer boxes, more compute)
+result, err := gopackx.Pack(ctx, boxTypes, items, gopackx.Optimize())
+```
+
+## TrialPacking (Variable-Sized Bin Packing)
+
+The TrialPacking solver addresses the **Variable-Sized Bin Packing Problem (VSBPP)**: given multiple box types, select which types to use and how many of each, minimizing total boxes. Bins are treated as templates — the solver creates instances as needed.
+
+When a new bin is needed, it runs the actual placement engine on a temporary copy of **each** candidate bin type, measuring how many items really fit (not just volume estimates). It picks the type with the best fill ratio.
+
+```go
+tp := solver.NewTrialPacking(func() placement.Engine {
+    return placement.NewPivotEngine()
+})
+result, err := tp.Solve(ctx, binTypes, items)
+```
+
+### Lookahead (Level 4)
+
+Enable lookahead to also estimate how many future bins will be needed. This leads to better global decisions — for example, choosing a medium box now if it means avoiding an extra box later:
+
+```go
+tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
+```
+
+### Performance
+
+| Scenario | Time | Memory |
+|---|---|---|
+| 20 items, 3 bin types | ~70µs | 74KB |
+| 20 items, 3 bin types (lookahead) | ~97µs | 65KB |
+| 50 items, 5 bin types | ~3.4ms | 802KB |
+
+## Metaheuristic (Cross-Bin Optimization)
+
+The Metaheuristic solver uses **Variable Neighborhood Search (VNS)** to redistribute items across bins after an initial packing. It can find solutions that greedy approaches miss.
+
+```go
+m := solver.NewMetaheuristic(func() placement.Engine {
+    return placement.NewPivotEngine()
+})
+result, err := m.Solve(ctx, binTypes, items)
+```
+
+### How It Works
+
+1. **Seed**: Generates an initial solution using TrialPacking with lookahead.
+2. **VNS Loop**: Iteratively applies neighborhood operators to improve the solution:
+   - **MOVE**: Move an item from the least-filled bin to another.
+   - **SWAP**: Swap items between two bins to improve geometry.
+   - **REPACK**: Eliminate a bin by redistributing all its items to other bins.
+   - **CHANGE_TYPE**: Downsize a bin to a smaller type if items still fit.
+3. **Validation**: Each modification is verified using the real 3D placement engine.
+4. **Acceptance**: Only improvements (fewer bins or higher fill ratio) are accepted.
+
+### Configuration
+
+```go
+m := solver.NewMetaheuristic(engineFactory,
+    solver.MetaMaxIter(2000),        // max VNS iterations (default: 1000)
+    solver.MetaMaxNoImprove(500),    // stop after N iterations without improvement (default: 200)
+    solver.MetaSeed(customSolver),   // use a custom seed solver
+)
+```
+
+### Performance
+
+| Scenario | Time | Result |
+|---|---|---|
+| 17 items, 4 bin types (real order) | ~30ms | 3 boxes (vs. 4 with TrialPacking) |
+| 20 items, 3 bin types (generic) | ~110µs | Same as seed (already optimal) |
+
+The metaheuristic adds minimal overhead when the seed is already optimal. The cost is only significant when cross-bin redistribution finds improvements.
 
 ## Branch & Bound
 
@@ -239,21 +328,25 @@ if len(result.UnfittedItems) > 0 && len(result.UnfittedItems) <= 12 {
 
 | Scenario | Recommendation |
 |---|---|
-| **General purpose (>90% of cases)** | Standard `Packer` with defaults |
+| **Multiple box sizes, minimize boxes (e-commerce)** | `gopackx.Pack()` or TrialPacking with lookahead |
+| **Same as above, quality critical** | `gopackx.Pack()` with `Optimize()` or Metaheuristic |
+| **Fixed pre-created bins** | Standard `Packer` with defaults |
 | **Don't know which engine/strategy is best** | Parallel solver (tries all, picks best) |
-| **Quality matters, multiple cores available** | Parallel solver with custom configs |
-| **Small item set (8-12 items), optimal packing critical** | Branch & Bound (fast) with timeout |
+| **Small item set (8-12 items), optimal per-bin packing** | Branch & Bound (fast) with timeout |
 | **Very small item set (up to 8 items), exhaustive search** | Branch & Bound (full) |
-| **High throughput, many packing operations** | Standard `Packer` with LAFF-Fast engine |
-| **Post-processing overflow items** | Branch & Bound on unfitted items |
+| **High throughput, many packing operations** | TrialPacking (no lookahead) or `Packer` with LAFF-Fast |
 
 ## Benchmark Summary
 
 All benchmarks run on AMD Ryzen 9 9950X3D:
 
-| Solver | Items | Time | Memory | Allocs |
+| Solver | Scenario | Time | Memory | Allocs |
 |---|---|---|---|---|
-| BB Fast | 6 | ~5.3us | 6.6KB | 77 |
-| BB Fast | 8 | ~10.6us | 9.9KB | 111 |
-| BB Full | 6 | ~5.2us | 6.6KB | 77 |
-| Parallel (default, 5 configs) | 50 | ~17ms | 975KB | 6551 |
+| TrialPacking L3 | 20 items, 3 bin types | ~70µs | 74KB | 471 |
+| TrialPacking L4 | 20 items, 3 bin types | ~97µs | 65KB | 416 |
+| Metaheuristic | 17 items, 4 bin types | ~30ms | 49MB | 443K |
+| Metaheuristic | 20 items, 3 bin types | ~110µs | 179KB | 2.2K |
+| BB Fast | 6 items | ~5.3µs | 6.6KB | 77 |
+| BB Fast | 8 items | ~10.6µs | 9.9KB | 111 |
+| BB Full | 6 items | ~5.2µs | 6.6KB | 77 |
+| Parallel (5 configs) | 50 items | ~17ms | 975KB | 6.6K |
