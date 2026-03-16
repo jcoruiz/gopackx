@@ -324,6 +324,28 @@ if len(result.UnfittedItems) > 0 && len(result.UnfittedItems) <= 12 {
 }
 ```
 
+## Cost Optimization
+
+All VSBPP solvers (TrialPacking and Metaheuristic) support cost-aware bin selection. When bin types have a `Cost` set, solvers minimize **total cost** instead of bin count.
+
+```go
+boxes := []*model.Bin{
+    model.NewBin("Small",  30, 25, 20,  5, model.BinCost(15.00)),
+    model.NewBin("Medium", 40, 35, 30, 15, model.BinCost(30.00)),
+    model.NewBin("Large",  60, 50, 40, 25, model.BinCost(45.00)),
+}
+
+result, _ := gopackx.Pack(ctx, boxes, items)
+fmt.Printf("Total cost: $%.2f\n", result.Stats.TotalCost)
+```
+
+**How it works:**
+
+- **TrialPacking**: Selects bin types by `cost / packed volume` ratio (lower is better). With lookahead, estimates future cost to make globally better decisions.
+- **Metaheuristic**: Compares solutions by total cost. REPACK and CHANGE_TYPE operators actively seek to reduce total cost by downsizing bins.
+
+**Backward compatible**: When `Cost` is 0 (default), all solvers behave exactly as before — minimizing bin count with fill ratio as tiebreaker.
+
 ## When to Use Which
 
 | Scenario | Recommendation |
@@ -342,8 +364,8 @@ All benchmarks run on AMD Ryzen 9 9950X3D:
 
 | Solver | Scenario | Time | Memory | Allocs |
 |---|---|---|---|---|
-| TrialPacking L3 | 20 items, 3 bin types | ~70µs | 74KB | 471 |
-| TrialPacking L4 | 20 items, 3 bin types | ~97µs | 65KB | 416 |
+| TrialPacking | 20 items, 3 bin types | ~70µs | 74KB | 471 |
+| TrialPacking (lookahead) | 20 items, 3 bin types | ~97µs | 65KB | 416 |
 | Metaheuristic | 17 items, 4 bin types | ~30ms | 49MB | 443K |
 | Metaheuristic | 20 items, 3 bin types | ~110µs | 179KB | 2.2K |
 | BB Fast | 6 items | ~5.3µs | 6.6KB | 77 |

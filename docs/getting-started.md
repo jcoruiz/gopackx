@@ -120,6 +120,7 @@ The `result.Stats` field contains summary metrics:
 | `UnfittedCount` | Number of items that could not be placed |
 | `VolumeUsedPct` | Average volume utilization across active bins (0-100) |
 | `WeightUsedPct` | Average weight utilization across active bins (0-100) |
+| `TotalCost` | Sum of `Cost` for all used bins (0 if costs not set) |
 
 ### Accessing Placed Items
 
@@ -172,6 +173,6 @@ model.NewItem("panel", 100, 50, 5, 10,
 
 - **[Strategies](strategies.md)** -- Learn about the 7 packing strategies and when to use each
 - **[Placement Engines](placement-engines.md)** -- Understand Pivot Points, Extreme Points, and LAFF engines
-- **[Solvers](solvers.md)** -- Use Branch & Bound and Parallel solvers for optimal results
+- **[Solvers](solvers.md)** -- Use TrialPacking, Metaheuristic, Branch & Bound, and Parallel solvers
 - **[Constraints](constraints.md)** -- Configure weight, rotation, fragility, stability, and more
 - **[Performance](performance.md)** -- Benchmarks, scaling considerations, and tuning tips

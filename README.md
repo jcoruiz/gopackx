@@ -1,12 +1,15 @@
 # GoPackX
 
-A high-performance 3D bin packing library for Go. GoPackX solves the problem of fitting items into containers optimally, considering dimensions, weight, rotations, stability, and physical constraints.
+A high-performance 3D bin packing library for Go with variable-sized box selection and cross-bin optimization. GoPackX solves the problem of fitting items into containers optimally, considering dimensions, weight, cost, rotations, stability, and physical constraints.
 
 ## Features
 
-- **Multiple placement engines** — Pivot Points, Extreme Points, and LAFF (Largest Area Fit First)
+- **Variable-sized bin packing** — automatically selects which box types to use and how many, minimizing total boxes or total cost
+- **Cross-bin optimization** — VNS metaheuristic redistributes items across bins to find solutions greedy approaches miss
+- **Multiple placement engines** — Pivot Points, Extreme Points, MaxRects, and LAFF (Largest Area Fit First)
 - **7 packing strategies** — BestFitDecreasing, MinimizeBins, BestFit, Greedy, NextFit, WorstFit, AlmostWorstFit
-- **Advanced solvers** — Branch & Bound (exact) and Parallel multi-config solver
+- **Advanced solvers** — TrialPacking, Metaheuristic, Branch & Bound (exact), and Parallel multi-config solver
+- **Cost optimization** — assign costs per box type; solvers minimize total cost instead of box count
 - **Physical constraints** — weight limits, load-bearing capacity, fragile items, stability checks, gravity center analysis
 - **6 rotation types** with support for upright-only and custom rotation restrictions
 - **Fix-point correction** — automatically compacts items toward the origin for tighter packing
@@ -21,9 +24,67 @@ go get github.com/jcoruiz/gopackx
 
 Requires Go 1.22 or later.
 
+## Quick Start
+
+The simplest way to use GoPackX: define your available box types and items, and let the library figure out the best combination.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jcoruiz/gopackx"
+	"github.com/jcoruiz/gopackx/pkg/model"
+)
+
+func main() {
+	// Available box types (used as templates — solver creates instances as needed)
+	boxes := []*model.Bin{
+		model.NewBin("Small Box", 30, 25, 20, 5),
+		model.NewBin("Medium Box", 40, 35, 30, 15),
+		model.NewBin("Large Box", 60, 50, 40, 25),
+	}
+
+	items := []*model.Item{
+		model.NewItem("item-1", 25, 20, 15, 2),
+		model.NewItem("item-2", 35, 30, 25, 8),
+		model.NewItem("item-3", 50, 40, 30, 12),
+	}
+
+	result, _ := gopackx.Pack(context.Background(), boxes, items)
+
+	fmt.Printf("Fitted: %d/%d in %d boxes\n",
+		result.Stats.FittedItems, result.Stats.TotalItems, result.Stats.TotalBins)
+}
+```
+
+For better results at the cost of more computation, enable the metaheuristic optimizer:
+
+```go
+result, _ := gopackx.Pack(ctx, boxes, items, gopackx.Optimize())
+```
+
+### Cost optimization
+
+When box types have different prices, the solver minimizes total cost instead of box count:
+
+```go
+boxes := []*model.Bin{
+	model.NewBin("Small", 30, 25, 20, 5, model.BinCost(15.00)),
+	model.NewBin("Large", 60, 50, 40, 25, model.BinCost(45.00)),
+}
+
+result, _ := gopackx.Pack(ctx, boxes, items)
+fmt.Printf("Total cost: $%.2f\n", result.Stats.TotalCost)
+```
+
 ## Usage
 
-### Basic packing
+### Basic packing (fixed bins)
+
+For packing into pre-created bins (when you already know which containers to use):
 
 ```go
 package main
@@ -120,49 +181,39 @@ engine := placement.NewPivotEngine(placement.WithStability(0.7))
 engine := placement.NewExtremePointEngine(placement.WithEPStability(0.7))
 ```
 
-### Branch & Bound solver
-
-Exhaustively searches for the optimal item ordering within a time budget.
+### Advanced solvers
 
 ```go
 import "github.com/jcoruiz/gopackx/pkg/solver"
 
-bb := solver.NewBranchBound(func() placement.Engine {
-	return placement.NewPivotEngine()
-})
+// TrialPacking — variable-sized bin packing with simulated bin selection
+tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
+result, _ := tp.Solve(ctx, binTypes, items)
 
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-defer cancel()
+// Metaheuristic — cross-bin optimization via VNS
+m := solver.NewMetaheuristic(engineFactory)
+result, _ := m.Solve(ctx, binTypes, items)
 
-result, err := bb.Solve(ctx, bins, items)
+// Branch & Bound — exhaustive per-bin optimization
+bb := solver.NewBranchBound(engineFactory)
+result, _ := bb.Solve(ctx, bins, items)
+
+// Parallel — runs multiple engine/strategy combos concurrently
+ps := solver.NewParallel()
+result, _ := ps.Solve(ctx, bins, items)
 ```
 
-The full variant (`BBFull()`) also explores all rotation combinations per item — more thorough but slower.
-
-### Parallel multi-config solver
-
-Runs multiple engine/strategy combinations concurrently and returns the best result.
-
-```go
-ps := solver.NewParallel() // uses a default set of 5 configurations
-
-// Or specify custom configurations:
-ps := solver.NewParallel(
-	solver.WithConfig(func() placement.Engine { return placement.NewPivotEngine() }, strategy.BestFitDecreasing),
-	solver.WithConfig(func() placement.Engine { return placement.NewExtremePointEngine() }, strategy.MinimizeBins),
-)
-
-result, err := ps.Solve(ctx, bins, items)
-```
+See [Solvers documentation](docs/solvers.md) for details on each solver and when to use which.
 
 ## Architecture
 
 ```
+gopackx.go          Top-level API: Pack(), Optimize(), WithEngine()
 pkg/
 ├── model/          Core types: Item, Bin, Result, PackingStats
-├── packer/         Public API — orchestrates strategy + engine
-├── placement/      Placement engines (Pivot, ExtremePoint, LAFF)
-├── solver/         Advanced solvers (BranchBound, Parallel)
+├── packer/         Simple packing into pre-created bins
+├── placement/      Placement engines (Pivot, ExtremePoint, MaxRects, LAFF)
+├── solver/         Advanced solvers (TrialPacking, Metaheuristic, BranchBound, Parallel)
 ├── strategy/       Item sorting and bin selection strategies
 ├── rotation/       Rotation utilities and constraint checking
 ├── intersection/   AABB 3D collision detection
