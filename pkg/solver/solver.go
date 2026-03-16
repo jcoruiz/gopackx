@@ -17,6 +17,7 @@ func computeStats(bins []*model.Bin, allItems []*model.Item, unfitted []*model.I
 	totalVolPct := 0.0
 	totalWeight := 0.0
 	totalMaxWeight := 0.0
+	totalCost := 0.0
 
 	for _, bin := range bins {
 		if len(bin.Items) > 0 {
@@ -24,6 +25,7 @@ func computeStats(bins []*model.Bin, allItems []*model.Item, unfitted []*model.I
 			totalVolPct += bin.VolumeUsedPct()
 			totalWeight += bin.TotalWeight()
 			totalMaxWeight += bin.MaxWeight
+			totalCost += bin.Cost
 		}
 	}
 
@@ -43,5 +45,6 @@ func computeStats(bins []*model.Bin, allItems []*model.Item, unfitted []*model.I
 		UnfittedCount: len(unfitted),
 		VolumeUsedPct: avgVolPct,
 		WeightUsedPct: avgWeightPct,
+		TotalCost:     totalCost,
 	}
 }

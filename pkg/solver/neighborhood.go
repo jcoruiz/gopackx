@@ -24,6 +24,7 @@ type solutionScore struct {
 	unfitted    int
 	avgFillPct  float64
 	totalVolPct float64
+	totalCost   float64
 }
 
 type neighborhoodOp int
@@ -53,7 +54,6 @@ func cloneSolution(s *solution) *solution {
 func extractSolution(result *model.Result, items []*model.Item, binTypes []*model.Bin) *solution {
 	sol := &solution{
 		assignments: make([]int, len(items)),
-		nBins:       0,
 	}
 
 	// Initialize all as unfitted.
@@ -126,11 +126,13 @@ func scoreSolution(sol *solution, items []*model.Item, binTypes []*model.Bin) so
 	}
 
 	totalPct := 0.0
+	totalCost := 0.0
 	activeBins := 0
 	for b := 0; b < sol.nBins; b++ {
 		if binVols[b] > 0 {
 			activeBins++
 			totalPct += binVols[b] / binTypes[sol.binTypeIdx[b]].Volume * 100
+			totalCost += binTypes[sol.binTypeIdx[b]].Cost
 		}
 	}
 
@@ -144,6 +146,7 @@ func scoreSolution(sol *solution, items []*model.Item, binTypes []*model.Bin) so
 		unfitted:    unfitted,
 		avgFillPct:  avgPct,
 		totalVolPct: totalPct,
+		totalCost:   totalCost,
 	}
 }
 
@@ -152,6 +155,12 @@ func isBetterSol(a, b *solution) bool {
 	// Fewer unfitted items first.
 	if a.score.unfitted != b.score.unfitted {
 		return a.score.unfitted < b.score.unfitted
+	}
+	// When costs are set, minimize total cost.
+	if a.score.totalCost > 0 || b.score.totalCost > 0 {
+		if a.score.totalCost != b.score.totalCost {
+			return a.score.totalCost < b.score.totalCost
+		}
 	}
 	// Fewer bins.
 	if a.score.totalBins != b.score.totalBins {

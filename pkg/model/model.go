@@ -145,6 +145,7 @@ type Bin struct {
 	Height        float64
 	Depth         float64
 	MaxWeight     float64
+	Cost          float64 // cost per bin; 0 means unset (solvers minimize bin count instead)
 	Volume        float64
 	Items         []*Item
 	UnfittedItems []*Item
@@ -158,9 +159,18 @@ type Bin struct {
 	FragileIdxs []int // indices of fragile items (only populated when needed)
 }
 
+// BinOption configures optional fields on a Bin.
+type BinOption func(*Bin)
+
+// BinCost sets the cost per bin unit. When set, solvers minimize total cost
+// instead of total bin count.
+func BinCost(cost float64) BinOption {
+	return func(b *Bin) { b.Cost = cost }
+}
+
 // NewBin creates a new Bin with precalculated volume.
-func NewBin(id string, w, h, d, maxWeight float64) *Bin {
-	return &Bin{
+func NewBin(id string, w, h, d, maxWeight float64, opts ...BinOption) *Bin {
+	b := &Bin{
 		ID:        id,
 		Width:     w,
 		Height:    h,
@@ -168,6 +178,10 @@ func NewBin(id string, w, h, d, maxWeight float64) *Bin {
 		MaxWeight: maxWeight,
 		Volume:    w * h * d,
 	}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
 }
 
 // PlaceItem adds an item to the bin and updates tracked weight/volume.
@@ -235,6 +249,7 @@ type PackingStats struct {
 	UnfittedCount int
 	VolumeUsedPct float64
 	WeightUsedPct float64
+	TotalCost     float64 // sum of Cost for all used bins (0 if costs not set)
 }
 
 // Result holds the outcome of a packing operation.

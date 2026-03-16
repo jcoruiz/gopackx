@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"math"
+	"strconv"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
@@ -137,6 +138,8 @@ type trialScore struct {
 	fillRatio     float64
 	fittedCount   int
 	estimatedBins float64 // only used with lookahead
+	estimatedCost float64 // only used with lookahead + costs
+	costPerVol    float64 // cost / packed volume; lower is better
 }
 
 // selectBinType runs trial packing for each bin type and returns the best.
@@ -156,6 +159,9 @@ func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin
 
 		if tp.lookahead {
 			score.estimatedBins = tp.estimateTotalBins(binTypes, remaining, score)
+			if hasCosts(binTypes) {
+				score.estimatedCost = tp.estimateTotalCost(binTypes, remaining, score)
+			}
 		}
 
 		if tp.isTrialBetter(score, best) {
@@ -186,14 +192,21 @@ func (tp *TrialPacking) runTrial(binType *model.Bin, remaining []*model.Item, ty
 
 	fittedCount := len(trialBin.Items)
 	fillRatio := 0.0
+	usedVol := trialBin.UsedVolume()
 	if trialBin.Volume > 0 && fittedCount > 0 {
-		fillRatio = trialBin.UsedVolume() / trialBin.Volume
+		fillRatio = usedVol / trialBin.Volume
+	}
+
+	cpv := 0.0
+	if binType.Cost > 0 && usedVol > 0 {
+		cpv = binType.Cost / usedVol
 	}
 
 	return trialScore{
 		binTypeIdx:  typeIdx,
 		fillRatio:   fillRatio,
 		fittedCount: fittedCount,
+		costPerVol:  cpv,
 	}
 }
 
@@ -257,8 +270,19 @@ func (tp *TrialPacking) isTrialBetter(a, b trialScore) bool {
 		return true
 	}
 
+	// When costs are set, minimize cost.
+	if a.costPerVol > 0 || b.costPerVol > 0 {
+		if tp.lookahead && a.estimatedCost != b.estimatedCost {
+			return a.estimatedCost < b.estimatedCost
+		}
+		if a.costPerVol != b.costPerVol {
+			return a.costPerVol < b.costPerVol
+		}
+		return a.fillRatio > b.fillRatio
+	}
+
 	if tp.lookahead {
-		// Level 4: minimize estimated total bins first.
+		// Minimize estimated total bins first.
 		if a.estimatedBins != b.estimatedBins {
 			return a.estimatedBins < b.estimatedBins
 		}
@@ -270,7 +294,7 @@ func (tp *TrialPacking) isTrialBetter(a, b trialScore) bool {
 		return a.binTypeIdx < b.binTypeIdx
 	}
 
-	// Level 3: maximize fill ratio.
+	// Maximize fill ratio.
 	if a.fillRatio != b.fillRatio {
 		return a.fillRatio > b.fillRatio
 	}
@@ -282,6 +306,53 @@ func (tp *TrialPacking) isTrialBetter(a, b trialScore) bool {
 	return a.binTypeIdx < b.binTypeIdx
 }
 
+// hasCosts returns true if any bin type has a cost set.
+func hasCosts(binTypes []*model.Bin) bool {
+	for _, bt := range binTypes {
+		if bt.Cost > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// estimateTotalCost estimates the total cost: this bin's cost plus a lower-bound
+// estimate of future costs based on remaining item volume and the cheapest
+// cost-per-volume bin type.
+func (tp *TrialPacking) estimateTotalCost(binTypes []*model.Bin, remaining []*model.Item, score trialScore) float64 {
+	thisCost := binTypes[score.binTypeIdx].Cost
+
+	leftoverCount := len(remaining) - score.fittedCount
+	if leftoverCount <= 0 {
+		return thisCost
+	}
+
+	totalVol := 0.0
+	for _, item := range remaining {
+		totalVol += item.Volume
+	}
+	packedVol := score.fillRatio * binTypes[score.binTypeIdx].Volume
+	leftoverVol := totalVol - packedVol
+
+	// Find the cheapest cost per unit volume among all bin types.
+	bestCPV := math.MaxFloat64
+	for _, bt := range binTypes {
+		if bt.Cost > 0 && bt.Volume > 0 {
+			cpv := bt.Cost / bt.Volume
+			if cpv < bestCPV {
+				bestCPV = cpv
+			}
+		}
+	}
+
+	futureCost := 0.0
+	if bestCPV < math.MaxFloat64 {
+		futureCost = leftoverVol * bestCPV
+	}
+
+	return thisCost + futureCost
+}
+
 // sortOpenBins returns existing open bins sorted by remaining volume ascending
 // (best fit), filtered by weight capacity.
 func sortOpenBins(bins []*model.Bin, item *model.Item) []*model.Bin {
@@ -290,20 +361,5 @@ func sortOpenBins(bins []*model.Bin, item *model.Item) []*model.Bin {
 
 // binInstanceID generates a unique bin ID for a new instance.
 func binInstanceID(typeID string, seq int) string {
-	return typeID + "-" + itoa(seq)
-}
-
-// itoa converts an int to a string without importing strconv.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	buf := [20]byte{}
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return typeID + "-" + strconv.Itoa(seq)
 }

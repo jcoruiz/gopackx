@@ -257,7 +257,142 @@ func TestTrialPacking_ItemTooLargeForAnyBin(t *testing.T) {
 	}
 }
 
-// --- Lookahead (Level 4) tests ---
+// --- Cost-aware tests ---
+
+func TestTrialPacking_PrefersCheaperBin(t *testing.T) {
+	// Two bins with same dimensions but different costs.
+	// The solver should prefer the cheaper one.
+	tp := NewTrialPacking(newPivot, WithLookahead())
+
+	binTypes := []*model.Bin{
+		model.NewBin("expensive", 50, 50, 50, 1000, model.BinCost(100)),
+		model.NewBin("cheap", 50, 50, 50, 1000, model.BinCost(10)),
+	}
+
+	items := []*model.Item{
+		model.NewItem("a", 20, 20, 20, 1),
+	}
+
+	result, err := tp.Solve(context.Background(), binTypes, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Stats.TotalCost != 10 {
+		t.Errorf("expected total cost 10 (cheap bin), got %.0f", result.Stats.TotalCost)
+	}
+	t.Logf("Used bin: %s, cost: %.0f", result.Bins[0].ID, result.Stats.TotalCost)
+}
+
+func TestTrialPacking_CostVsBinCount(t *testing.T) {
+	// Scenario: 1 large expensive box ($50) vs 2 small cheap boxes ($15 each).
+	// 2 small boxes cost $30 total < $50 for 1 large.
+	// The solver should prefer 2 cheap boxes when minimizing cost.
+	tp := NewTrialPacking(newPivot, WithLookahead())
+
+	binTypes := []*model.Bin{
+		model.NewBin("small-cheap", 25, 25, 25, 1000, model.BinCost(15)),
+		model.NewBin("large-expensive", 50, 50, 50, 1000, model.BinCost(50)),
+	}
+
+	items := []*model.Item{
+		model.NewItem("a", 20, 20, 20, 1),
+		model.NewItem("b", 20, 20, 20, 1),
+	}
+
+	result, err := tp.Solve(context.Background(), binTypes, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Bins: %d, Cost: %.0f", result.Stats.TotalBins, result.Stats.TotalCost)
+
+	// Should use 2 small-cheap ($30) instead of 1 large-expensive ($50).
+	if result.Stats.TotalCost > 35 {
+		t.Errorf("expected cost ≤30 (2 cheap boxes), got %.0f", result.Stats.TotalCost)
+	}
+}
+
+func TestTrialPacking_CostRespectsWeight(t *testing.T) {
+	// Cheap bin has low weight capacity — heavy items can't use it.
+	// The solver must pick the expensive bin for heavy items and cheap for light.
+	tp := NewTrialPacking(newPivot, WithLookahead())
+
+	binTypes := []*model.Bin{
+		model.NewBin("cheap-weak", 50, 50, 50, 3, model.BinCost(10)),    // max 3 kg
+		model.NewBin("expensive-strong", 50, 50, 50, 50, model.BinCost(80)), // max 50 kg
+	}
+
+	items := []*model.Item{
+		model.NewItem("heavy", 20, 20, 20, 10), // 10 kg — only fits in expensive
+		model.NewItem("light", 20, 20, 20, 1),  // 1 kg — fits in cheap
+	}
+
+	result, err := tp.Solve(context.Background(), binTypes, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Stats.FittedItems != 2 {
+		t.Fatalf("expected 2 fitted, got %d", result.Stats.FittedItems)
+	}
+
+	// Should use 1 expensive (for heavy) + 1 cheap (for light) = $90.
+	// NOT 1 expensive for both ($80) — because the cheap bin is cheaper for the light item.
+	// Actually, both fit in the expensive bin (20+20=40 < 50 in geometry, 10+1=11 < 50 in weight).
+	// But the cost-optimal solution depends on whether 1×$80 < 1×$80+1×$10.
+	// 1 expensive = $80, 2 bins (1 expensive + 1 cheap) = $90. So 1 expensive is cheaper.
+	// The point is: the heavy item MUST go in the expensive bin (weight constraint).
+	t.Logf("Bins: %d, Cost: $%.0f", result.Stats.TotalBins, result.Stats.TotalCost)
+
+	for _, bin := range result.Bins {
+		if len(bin.Items) > 0 {
+			t.Logf("  %s (max %.0f kg, $%.0f): %d items, %.1f kg",
+				bin.ID, bin.MaxWeight, bin.Cost, len(bin.Items), bin.TotalWeight())
+		}
+	}
+
+	// The heavy item must not be in the cheap bin.
+	for _, bin := range result.Bins {
+		if bin.MaxWeight <= 3 {
+			for _, item := range bin.Items {
+				if item.Weight > 3 {
+					t.Errorf("heavy item %s (%.1f kg) placed in weak bin %s (max %.0f kg)",
+						item.ID, item.Weight, bin.ID, bin.MaxWeight)
+				}
+			}
+		}
+	}
+}
+
+func TestTrialPacking_NoCostBackwardCompatible(t *testing.T) {
+	// Without costs, behavior should be identical to before.
+	tp := NewTrialPacking(newPivot)
+
+	binTypes := []*model.Bin{
+		model.NewBin("small", 25, 25, 25, 1000),
+		model.NewBin("large", 50, 50, 50, 1000),
+	}
+
+	items := []*model.Item{
+		model.NewItem("a", 20, 20, 20, 1),
+	}
+
+	result, err := tp.Solve(context.Background(), binTypes, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Stats.TotalCost != 0 {
+		t.Errorf("expected 0 cost when not set, got %.0f", result.Stats.TotalCost)
+	}
+	// Should prefer smaller bin (higher fill ratio).
+	if result.Bins[0].Volume > 20000 {
+		t.Errorf("expected small bin, got volume %.0f", result.Bins[0].Volume)
+	}
+}
+
+// --- Lookahead tests ---
 
 func TestTrialPackingLookahead_ReducesBins(t *testing.T) {
 	// Compare Level 3 vs Level 4 on a scenario where look-ahead helps.
@@ -443,14 +578,14 @@ func BenchmarkComparison_Greedy_vs_Trial(b *testing.B) {
 		}
 	})
 
-	b.Run("TrialPacking_L3", func(b *testing.B) {
+	b.Run("TrialPacking", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			tp := NewTrialPacking(newPivot)
 			tp.Solve(context.Background(), makeBins(), makeItems())
 		}
 	})
 
-	b.Run("TrialPacking_L4", func(b *testing.B) {
+	b.Run("TrialPacking_Lookahead", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			tp := NewTrialPacking(newPivot, WithLookahead())
 			tp.Solve(context.Background(), makeBins(), makeItems())
