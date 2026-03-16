@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
@@ -163,19 +164,19 @@ func (m *Metaheuristic) shake(sol *solution, op neighborhoodOp, items []*model.I
 }
 
 // dirtyBins returns bin indices that differ between two solutions.
-func (m *Metaheuristic) dirtyBins(old, new *solution) []int {
-	seen := make(map[int]bool)
-	for i := range old.assignments {
-		if old.assignments[i] != new.assignments[i] {
-			if new.assignments[i] >= 0 {
-				seen[new.assignments[i]] = true
+func (m *Metaheuristic) dirtyBins(prev, cur *solution) []int {
+	seen := make(map[int]struct{})
+	for i := range prev.assignments {
+		if prev.assignments[i] != cur.assignments[i] {
+			if cur.assignments[i] >= 0 {
+				seen[cur.assignments[i]] = struct{}{}
 			}
 		}
 	}
 	// Also check bins with changed types.
-	for b := 0; b < new.nBins && b < len(old.binTypeIdx) && b < len(new.binTypeIdx); b++ {
-		if old.binTypeIdx[b] != new.binTypeIdx[b] {
-			seen[b] = true
+	for b := 0; b < cur.nBins && b < len(prev.binTypeIdx) && b < len(cur.binTypeIdx); b++ {
+		if prev.binTypeIdx[b] != cur.binTypeIdx[b] {
+			seen[b] = struct{}{}
 		}
 	}
 	out := make([]int, 0, len(seen))
@@ -205,7 +206,7 @@ func (m *Metaheuristic) materialize(sol *solution, items []*model.Item, binTypes
 		bt := binTypes[sol.binTypeIdx[b]]
 		packed, ok := repackBin(m.newEngine, bt, binItems)
 		if ok {
-			packed.ID = bt.ID + "-" + itoa(len(resultBins))
+			packed.ID = bt.ID + "-" + strconv.Itoa(len(resultBins))
 			resultBins = append(resultBins, packed)
 		} else {
 			// Shouldn't happen if revalidation passed, but handle gracefully.
