@@ -86,7 +86,7 @@ func TestPackNoIntersections(t *testing.T) {
 	p := NewPacker()
 	p.AddBin(model.NewBin("box", 50, 50, 50, 1000))
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		p.AddItem(model.NewItem("i", 10, 10, 10, 1))
 	}
 
@@ -96,7 +96,7 @@ func TestPackNoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range bin.Items {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("items %d and %d in bin %s intersect", i, j, bin.ID)
@@ -234,20 +234,20 @@ func BenchmarkPack50Items_LAFFFast(b *testing.B) {
 
 func benchmarkPack50(b *testing.B, engine placement.Engine) {
 	b.Helper()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		p := NewPacker(WithPlacementEngine(engine))
 		p.AddBin(model.NewBin("b1", 100, 100, 100, 10000))
 		p.AddBin(model.NewBin("b2", 100, 100, 100, 10000))
 		p.AddBin(model.NewBin("b3", 100, 100, 100, 10000))
 
-		for j := 0; j < 50; j++ {
+		for j := range 50 {
 			w := float64(5 + j%20)
 			h := float64(5 + (j*7)%15)
 			d := float64(5 + (j*13)%10)
 			p.AddItem(model.NewItem("i", w, h, d, 1))
 		}
 
-		p.Pack(context.Background())
+		_, _ = p.Pack(context.Background())
 	}
 }
 
@@ -299,7 +299,7 @@ func TestPackingQualityComparison(t *testing.T) {
 
 			// Verify no intersections.
 			for _, bin := range result.Bins {
-				for i := 0; i < len(bin.Items); i++ {
+				for i := range bin.Items {
 					for j := i + 1; j < len(bin.Items); j++ {
 						if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 							t.Errorf("items %d and %d in bin %s intersect", i, j, bin.ID)

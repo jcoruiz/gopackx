@@ -56,7 +56,7 @@ func makeBins() []*model.Bin {
 	}
 }
 
-func printResult(name string, result *model.Result, elapsed time.Duration) {
+func printResult(result *model.Result, elapsed time.Duration) {
 	fmt.Printf("  Fitted: %d / %d items\n", result.Stats.FittedItems, result.Stats.TotalItems)
 	fmt.Printf("  Bins used: %d\n", result.Stats.TotalBins)
 	fmt.Printf("  Avg volume used: %.1f%%\n", result.Stats.VolumeUsedPct)
@@ -97,7 +97,7 @@ func demoBBFast() {
 		log.Printf("  B&B fast: %v (partial result used)\n", err)
 	}
 
-	printResult("B&B Fast", result, elapsed)
+	printResult(result, elapsed)
 }
 
 func demoBBFull() {
@@ -123,7 +123,7 @@ func demoBBFull() {
 		log.Printf("  B&B full: %v (partial result used)\n", err)
 	}
 
-	printResult("B&B Full", result, elapsed)
+	printResult(result, elapsed)
 }
 
 func demoParallelDefault() {
@@ -145,7 +145,7 @@ func demoParallelDefault() {
 		log.Printf("  Parallel default: %v\n", err)
 	}
 
-	printResult("Parallel (default)", result, elapsed)
+	printResult(result, elapsed)
 }
 
 func demoParallelCustom() {
@@ -179,5 +179,5 @@ func demoParallelCustom() {
 		log.Printf("  Parallel custom: %v\n", err)
 	}
 
-	printResult("Parallel (custom)", result, elapsed)
+	printResult(result, elapsed)
 }

@@ -25,13 +25,13 @@ import "github.com/jcoruiz/gopackx"
 // Fast (TrialPacking with lookahead)
 result, err := gopackx.Pack(ctx, boxTypes, items)
 
-// Optimized (Metaheuristic — fewer boxes, more compute)
+// Optimized (Metaheuristic - fewer boxes, more compute)
 result, err := gopackx.Pack(ctx, boxTypes, items, gopackx.Optimize())
 ```
 
 ## TrialPacking (Variable-Sized Bin Packing)
 
-The TrialPacking solver addresses the **Variable-Sized Bin Packing Problem (VSBPP)**: given multiple box types, select which types to use and how many of each, minimizing total boxes. Bins are treated as templates — the solver creates instances as needed.
+The TrialPacking solver addresses the **Variable-Sized Bin Packing Problem (VSBPP)**: given multiple box types, select which types to use and how many of each, minimizing total boxes. Bins are treated as templates - the solver creates instances as needed.
 
 When a new bin is needed, it runs the actual placement engine on a temporary copy of **each** candidate bin type, measuring how many items really fit (not just volume estimates). It picks the type with the best fill ratio.
 
@@ -44,7 +44,7 @@ result, err := tp.Solve(ctx, binTypes, items)
 
 ### Lookahead (Level 4)
 
-Enable lookahead to also estimate how many future bins will be needed. This leads to better global decisions — for example, choosing a medium box now if it means avoiding an extra box later:
+Enable lookahead to also estimate how many future bins will be needed. This leads to better global decisions - for example, choosing a medium box now if it means avoiding an extra box later:
 
 ```go
 tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
@@ -344,7 +344,7 @@ fmt.Printf("Total cost: $%.2f\n", result.Stats.TotalCost)
 - **TrialPacking**: Selects bin types by `cost / packed volume` ratio (lower is better). With lookahead, estimates future cost to make globally better decisions.
 - **Metaheuristic**: Compares solutions by total cost. REPACK and CHANGE_TYPE operators actively seek to reduce total cost by downsizing bins.
 
-**Backward compatible**: When `Cost` is 0 (default), all solvers behave exactly as before — minimizing bin count with fill ratio as tiebreaker.
+**Backward compatible**: When `Cost` is 0 (default), all solvers behave exactly as before - minimizing bin count with fill ratio as tiebreaker.
 
 ## When to Use Which
 

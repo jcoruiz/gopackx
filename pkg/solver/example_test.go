@@ -43,7 +43,7 @@ func ExampleTrialPacking_Solve() {
 		return placement.NewPivotEngine()
 	})
 
-	// Bin types (templates) — the solver clones them as needed.
+	// Bin types (templates) - the solver clones them as needed.
 	binTypes := []*model.Bin{
 		model.NewBin("small-box", 20, 20, 20, 100),
 		model.NewBin("medium-box", 40, 40, 40, 200),
@@ -104,7 +104,7 @@ func ExampleMetaheuristic_Solve() {
 		return placement.NewPivotEngine()
 	})
 
-	// Bin types — the solver creates instances as needed.
+	// Bin types - the solver creates instances as needed.
 	binTypes := []*model.Bin{
 		model.NewBin("small-box", 25, 25, 25, 10),
 		model.NewBin("large-box", 50, 50, 50, 50),

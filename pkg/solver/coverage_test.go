@@ -207,7 +207,7 @@ func TestCoverage_ShakeChangeType_WeightDontFit(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. isBetterSol (62.5% coverage) — cost comparison and same-bins-diff-fill
+// 6. isBetterSol (62.5% coverage) - cost comparison and same-bins-diff-fill
 // ---------------------------------------------------------------------------
 
 func TestCoverage_IsBetterSol_CostComparison(t *testing.T) {
@@ -253,7 +253,7 @@ func TestCoverage_IsBetterSol_FewerUnfitted(t *testing.T) {
 }
 
 func TestCoverage_IsBetterSol_OneCostZero(t *testing.T) {
-	// One has cost, the other doesn't — triggers the cost branch.
+	// One has cost, the other doesn't - triggers the cost branch.
 	a := &solution{score: solutionScore{unfitted: 0, totalBins: 2, totalCost: 0, avgFillPct: 80}}
 	b := &solution{score: solutionScore{unfitted: 0, totalBins: 2, totalCost: 5, avgFillPct: 80}}
 
@@ -263,7 +263,7 @@ func TestCoverage_IsBetterSol_OneCostZero(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. isTrialBetter (73.7% coverage) — cost paths, tie-breaking
+// 7. isTrialBetter (73.7% coverage) - cost paths, tie-breaking
 // ---------------------------------------------------------------------------
 
 func TestCoverage_IsTrialBetter_CostPerVol(t *testing.T) {
@@ -368,7 +368,7 @@ func TestCoverage_IsTrialBetter_FirstValid(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. shakeMove (80%) — single item in source, all preconditions failing
+// 8. shakeMove (80%) - single item in source, all preconditions failing
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeMove_SingleItemSource(t *testing.T) {
@@ -456,7 +456,7 @@ func TestCoverage_ShakeMove_WeightExceeded(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 9. materialize — repackBin fails (graceful fallback)
+// 9. materialize - repackBin fails (graceful fallback)
 // ---------------------------------------------------------------------------
 
 // failEngine is a placement engine that always fails to place items.
@@ -512,7 +512,7 @@ func TestCoverage_Materialize_UnassignedItems(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 10. matchBinType — no match (falls through to return 0)
+// 10. matchBinType - no match (falls through to return 0)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_MatchBinType_NoMatch(t *testing.T) {
@@ -542,13 +542,13 @@ func TestCoverage_MatchBinType_ExactMatch(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 11. Metaheuristic.Solve — empty seed, context cancellation mid-VNS
+// 11. Metaheuristic.Solve - empty seed, context cancellation mid-VNS
 // ---------------------------------------------------------------------------
 
 // emptySolver always returns an empty result (no items fitted).
 type emptySolver struct{}
 
-func (emptySolver) Solve(_ context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+func (emptySolver) Solve(_ context.Context, _ []*model.Bin, items []*model.Item) (*model.Result, error) {
 	return &model.Result{
 		Bins:          nil,
 		UnfittedItems: items,
@@ -566,7 +566,7 @@ func TestCoverage_MetaSolve_EmptySeedResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// With an empty seed, VNS has nothing to improve — all items should be unfitted.
+	// With an empty seed, VNS has nothing to improve - all items should be unfitted.
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -598,7 +598,7 @@ func TestCoverage_MetaSolve_ContextCancelMidVNS(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 12. TrialPacking.Solve — context cancellation during solve
+// 12. TrialPacking.Solve - context cancellation during solve
 // ---------------------------------------------------------------------------
 
 func TestCoverage_TrialSolve_ContextCancel(t *testing.T) {
@@ -642,7 +642,7 @@ func TestCoverage_TrialSelectBinType_ContextCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 13. packGreedy — context cancellation during packing
+// 13. packGreedy - context cancellation during packing
 // ---------------------------------------------------------------------------
 
 func TestCoverage_PackGreedy_ContextCancel(t *testing.T) {
@@ -663,7 +663,7 @@ func TestCoverage_PackGreedy_ContextCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 14. optimizeFast — all items fit on first try (n <= 1)
+// 14. optimizeFast - all items fit on first try (n <= 1)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_OptimizeFast_SingleItem(t *testing.T) {
@@ -701,7 +701,7 @@ func TestCoverage_OptimizeFast_AllFitGreedy(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 15. revalidate — bin index out of range, empty bin
+// 15. revalidate - bin index out of range, empty bin
 // ---------------------------------------------------------------------------
 
 func TestCoverage_Revalidate_BinOutOfRange(t *testing.T) {
@@ -785,7 +785,7 @@ func TestCoverage_ShakeSwap_LessThan2Bins(t *testing.T) {
 }
 
 func TestCoverage_ShakeSwap_SinglePair(t *testing.T) {
-	// Only 1 item total — need at least 2 for swap.
+	// Only 1 item total - need at least 2 for swap.
 	items := []*model.Item{
 		model.NewItem("a", 5, 5, 5, 1),
 	}
@@ -902,13 +902,13 @@ func TestCoverage_DirtyBins_ChangedType(t *testing.T) {
 		binTypeIdx:  []int{0, 0},
 		nBins:       2,
 	}
-	new := &solution{
+	updated := &solution{
 		assignments: []int{0, 1},
 		binTypeIdx:  []int{0, 1}, // bin 1 changed type
 		nBins:       2,
 	}
 
-	dirty := m.dirtyBins(old, new)
+	dirty := m.dirtyBins(old, updated)
 	found := false
 	for _, b := range dirty {
 		if b == 1 {
@@ -1164,7 +1164,7 @@ func TestCoverage_EstimateTotalCost_AllFit(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// sortedDims / sortedDims3 — all branch permutations
+// sortedDims / sortedDims3 - all branch permutations
 // ---------------------------------------------------------------------------
 
 func TestCoverage_SortedDims_AllPermutations(t *testing.T) {
@@ -1209,7 +1209,7 @@ func TestCoverage_SortedDims3_AllPermutations(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// optimizeFast — permutation loop runs and finds improvement
+// optimizeFast - permutation loop runs and finds improvement
 // ---------------------------------------------------------------------------
 
 func TestCoverage_OptimizeFast_PermutationImproves(t *testing.T) {
@@ -1257,7 +1257,7 @@ func TestCoverage_OptimizeFast_ContextCancelDuringPerm(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// BranchBound.Solve — context cancel mid-solve, empty inputs
+// BranchBound.Solve - context cancel mid-solve, empty inputs
 // ---------------------------------------------------------------------------
 
 func TestCoverage_BranchBound_ContextCancel(t *testing.T) {
@@ -1307,7 +1307,7 @@ func TestCoverage_BranchBound_EmptyInputs(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// BranchBound Full variant — exercises dfsFull
+// BranchBound Full variant - exercises dfsFull
 // ---------------------------------------------------------------------------
 
 func TestCoverage_BranchBound_Full(t *testing.T) {
@@ -1362,7 +1362,7 @@ func TestCoverage_BranchBound_Full_ContextCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeSwap — successful swap
+// shakeSwap - successful swap
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeSwap_Success(t *testing.T) {
@@ -1387,6 +1387,29 @@ func TestCoverage_ShakeSwap_Success(t *testing.T) {
 	// Whether it returns nil or a valid swap, it should not panic.
 }
 
+// assertWithinCapacity fails the test if any bin in sol exceeds the weight
+// or volume capacity of its bin type.
+func assertWithinCapacity(t *testing.T, sol *solution, items []*model.Item, binTypes []*model.Bin) {
+	t.Helper()
+	weights := make([]float64, sol.nBins)
+	vols := make([]float64, sol.nBins)
+	for i, a := range sol.assignments {
+		if a >= 0 {
+			weights[a] += items[i].Weight
+			vols[a] += items[i].Volume
+		}
+	}
+	for b := range sol.nBins {
+		bt := binTypes[sol.binTypeIdx[b]]
+		if weights[b] > bt.MaxWeight {
+			t.Errorf("bin %d weight %.1f exceeds max %.1f", b, weights[b], bt.MaxWeight)
+		}
+		if vols[b] > bt.Volume {
+			t.Errorf("bin %d volume %.1f exceeds capacity %.1f", b, vols[b], bt.Volume)
+		}
+	}
+}
+
 func TestCoverage_ShakeSwap_WeightViolation(t *testing.T) {
 	// Swap would violate weight constraints.
 	items := []*model.Item{
@@ -1406,9 +1429,10 @@ func TestCoverage_ShakeSwap_WeightViolation(t *testing.T) {
 	// heavy(9) swaps with light(1): bin0 gets light(1)=ok, bin1 gets heavy(9)+anchor(9)=18>10
 	// heavy(9) swaps with anchor(9): same weight, no improvement
 	// light(1) can't swap with heavy since bin1 would get 9+9=18>10
-	result := shakeSwap(sol, items, binTypes)
-	// The swap should either be nil or valid (not violate constraints).
-	_ = result
+	// A returned swap must respect the capacity of every bin.
+	if result := shakeSwap(sol, items, binTypes); result != nil {
+		assertWithinCapacity(t, result, items, binTypes)
+	}
 }
 
 func TestCoverage_ShakeSwap_VolumeViolation(t *testing.T) {
@@ -1426,12 +1450,14 @@ func TestCoverage_ShakeSwap_VolumeViolation(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	// This won't panic; swap should succeed (volumes are fine) or be nil.
-	_ = shakeSwap(sol, items, binTypes)
+	// A returned swap must respect the capacity of every bin.
+	if result := shakeSwap(sol, items, binTypes); result != nil {
+		assertWithinCapacity(t, result, items, binTypes)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// shakeRepackWithEngine — redistribution fails (items too big)
+// shakeRepackWithEngine - redistribution fails (items too big)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeRepackWithEngine_RedistFails(t *testing.T) {
@@ -1478,7 +1504,7 @@ func TestCoverage_ShakeRepackWithEngine_WeightBlock(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Materialize — empty bin in solution
+// Materialize - empty bin in solution
 // ---------------------------------------------------------------------------
 
 func TestCoverage_Materialize_EmptyBinSkipped(t *testing.T) {
@@ -1503,7 +1529,7 @@ func TestCoverage_Materialize_EmptyBinSkipped(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// extractSolution — bins with empty items, duplicate IDs
+// extractSolution - bins with empty items, duplicate IDs
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ExtractSolution_EmptyBinInResult(t *testing.T) {
@@ -1560,29 +1586,8 @@ func TestCoverage_ExtractSolution_DuplicateIDs(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TrialPacking.Solve — PlaceItem fails on new bin
+// TrialPacking.Solve - PlaceItem fails on new bin
 // ---------------------------------------------------------------------------
-
-// partialFailEngine places the first item but fails on subsequent ones.
-type partialFailEngine struct {
-	placed int
-	limit  int
-}
-
-func (e *partialFailEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	if e.placed >= e.limit {
-		return false
-	}
-	item.Placed = true
-	item.Position = [3]float64{0, 0, 0}
-	dim := item.Dimension()
-	item.PlacedDim = dim
-	bin.Items = append(bin.Items, item)
-	bin.ItemWeight += item.Weight
-	bin.ItemVolume += item.Volume
-	e.placed++
-	return true
-}
 
 func TestCoverage_TrialSolve_PlaceItemFailsOnNewBin(t *testing.T) {
 	// Engine that can't place any items - forces the unfitted path after selectBinType.
@@ -1685,7 +1690,7 @@ func TestCoverage_CollectUnfittedByUsed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// optimizeFast — permutation loop: context cancel, found improvement, perfect
+// optimizeFast - permutation loop: context cancel, found improvement, perfect
 // ---------------------------------------------------------------------------
 
 func TestCoverage_OptimizeFast_PermutationFindsImprovement(t *testing.T) {
@@ -1709,7 +1714,7 @@ func TestCoverage_OptimizeFast_PermutationFindsImprovement(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeMove — all bins have zero volume (srcBin < 0 path)
+// shakeMove - all bins have zero volume (srcBin < 0 path)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeMove_AllBinsEmpty(t *testing.T) {
@@ -1733,7 +1738,7 @@ func TestCoverage_ShakeMove_AllBinsEmpty(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeSwap — x > 50 limit path
+// shakeSwap - x > 50 limit path
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeSwap_LargeInput(t *testing.T) {
@@ -1762,11 +1767,14 @@ func TestCoverage_ShakeSwap_LargeInput(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// This should hit the x > 50 break. Either returns a swap or nil.
-	_ = shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes)
+	if result != nil && len(result.assignments) != n {
+		t.Errorf("assignments length = %d, want %d", len(result.assignments), n)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// shakeRepackWithEngine — empty bin in ranked (vol == 0 path)
+// shakeRepackWithEngine - empty bin in ranked (vol == 0 path)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeRepackWithEngine_EmptyBinInRanked(t *testing.T) {
@@ -1784,16 +1792,20 @@ func TestCoverage_ShakeRepackWithEngine_EmptyBinInRanked(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	// This should skip empty bins in ranking and fail to reduce.
+	// Empty bins are skipped in the ranking. If a repack is returned it must
+	// eliminate at least one bin and keep every bin within capacity.
 	result := shakeRepackWithEngine(sol, items, binTypes, nil)
-	// The only non-empty bin is 0, and we need >= 2 non-empty for meaningful repack.
-	// But the function checks nBins >= 2 (which is true for nBins=3).
-	// With only 1 non-empty bin, redistribution won't help.
-	_ = result
+	if result == nil {
+		return
+	}
+	if result.nBins >= sol.nBins {
+		t.Errorf("repack returned %d bins, want fewer than %d", result.nBins, sol.nBins)
+	}
+	assertWithinCapacity(t, result, items, binTypes)
 }
 
 // ---------------------------------------------------------------------------
-// repackBin — third order (MinimizeBins) succeeds
+// repackBin - third order (MinimizeBins) succeeds
 // ---------------------------------------------------------------------------
 
 // thirdOrderEngine places items only when sorted by MinimizeBins strategy.
@@ -1810,27 +1822,6 @@ func (e *thirdOrderEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	// creates 3 separate engine instances.
 	item.Placed = true
 	item.Position = [3]float64{0, 0, 0}
-	dim := item.Dimension()
-	item.PlacedDim = dim
-	bin.Items = append(bin.Items, item)
-	bin.ItemWeight += item.Weight
-	bin.ItemVolume += item.Volume
-	return true
-}
-
-// failNEngine fails the first N PlaceItem calls, then succeeds.
-type failNEngine struct {
-	failCount int
-	maxFails  int
-}
-
-func (e *failNEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	if e.failCount < e.maxFails {
-		e.failCount++
-		return false
-	}
-	item.Placed = true
-	item.Position = [3]float64{float64(len(bin.Items)) * 10, 0, 0}
 	dim := item.Dimension()
 	item.PlacedDim = dim
 	bin.Items = append(bin.Items, item)
@@ -1865,19 +1856,9 @@ func TestCoverage_RepackBin_ThirdOrderSucceeds(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TrialPacking.Solve — PlaceItem fails AFTER selectBinType returns valid
+// TrialPacking.Solve - PlaceItem fails AFTER selectBinType returns valid
 // This covers line 116-119 where engine fails on the new bin.
 // ---------------------------------------------------------------------------
-
-// selectOnlyEngine succeeds during trial (runTrial) but fails on actual placement.
-type selectOnlyEngine struct {
-	trialMode bool
-}
-
-func (e *selectOnlyEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	// Always fail in actual placement mode.
-	return false
-}
 
 func TestCoverage_TrialSolve_PlaceItemFailsAfterSelect(t *testing.T) {
 	// We need: selectBinType returns a valid binTypeIdx (trial places the item),
@@ -1922,13 +1903,13 @@ func TestCoverage_TrialSolve_PlaceItemFailsAfterSelect(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Metaheuristic.Solve — context cancelled after seed, before VNS (line 81-83)
+// Metaheuristic.Solve - context cancelled after seed, before VNS (line 81-83)
 // ---------------------------------------------------------------------------
 
 // slowSolver delays so context expires during seed solve.
 type slowSolver struct{}
 
-func (slowSolver) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+func (slowSolver) Solve(_ context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
 	// Simulate a solver that returns after context is cancelled.
 	// Return a valid result.
 	return &model.Result{
@@ -1956,7 +1937,7 @@ func TestCoverage_MetaSolve_ContextCancelAfterSeed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Metaheuristic.Solve — inner loop context cancellation (line 101-102)
+// Metaheuristic.Solve - inner loop context cancellation (line 101-102)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_MetaSolve_InnerLoopCtxCancel(t *testing.T) {
@@ -1984,7 +1965,7 @@ func TestCoverage_MetaSolve_InnerLoopCtxCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// dfsFull — context cancellation (line 182), count pruning (line 195)
+// dfsFull - context cancellation (line 182), count pruning (line 195)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_DfsFull_ContextCancel(t *testing.T) {
@@ -2024,14 +2005,8 @@ func TestCoverage_DfsFull_OptimalFound(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Parallel.Solve — all goroutines return nil (best == nil path, line 108)
+// Parallel.Solve - all goroutines return nil (best == nil path, line 108)
 // ---------------------------------------------------------------------------
-
-type nilSolver struct{}
-
-func (nilSolver) Solve(_ context.Context, _ []*model.Bin, _ []*model.Item) (*model.Result, error) {
-	return nil, nil
-}
 
 func TestCoverage_Parallel_NilResults(t *testing.T) {
 	// Use a config where packGreedy is called with a cancelled context
@@ -2045,7 +2020,7 @@ func TestCoverage_Parallel_NilResults(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeSwap — successful swap with volume check path
+// shakeSwap - successful swap with volume check path
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeSwap_VolumeFails(t *testing.T) {
@@ -2064,11 +2039,14 @@ func TestCoverage_ShakeSwap_VolumeFails(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	_ = shakeSwap(sol, items, binTypes)
+	// A returned swap must respect the capacity of every bin.
+	if result := shakeSwap(sol, items, binTypes); result != nil {
+		assertWithinCapacity(t, result, items, binTypes)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// optimizeFast — permutation finds improvement (lines 130-135), perfect pack
+// optimizeFast - permutation finds improvement (lines 130-135), perfect pack
 // ---------------------------------------------------------------------------
 
 func TestCoverage_OptimizeFast_PermFoundPerfect(t *testing.T) {
@@ -2119,7 +2097,7 @@ func TestCoverage_OptimizeFast_PermContextCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeSwap — all pairs fail, x > 50 break, return nil (lines 329-333)
+// shakeSwap - all pairs fail, x > 50 break, return nil (lines 329-333)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeSwap_AllPairsSameBin(t *testing.T) {
@@ -2152,13 +2130,8 @@ func TestCoverage_ShakeSwap_AllPairsSameBin(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TrialPacking.Solve — selectBinType returns valid but PlaceItem fails (116-119)
+// TrialPacking.Solve - selectBinType returns valid but PlaceItem fails (116-119)
 // ---------------------------------------------------------------------------
-
-// oneTrialEngine: succeeds during trial creation but fails for main engine.
-type oneTrialEngine struct {
-	isFirst bool
-}
 
 func TestCoverage_TrialSolve_PlaceOnNewBinFails(t *testing.T) {
 	// Create a scenario where selectBinType finds a valid bin type
@@ -2196,7 +2169,7 @@ func TestCoverage_TrialSolve_PlaceOnNewBinFails(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// selectBinType — context cancelled (line 149-150)
+// selectBinType - context cancelled (line 149-150)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_SelectBinType_CtxCancel(t *testing.T) {
@@ -2221,14 +2194,12 @@ func TestCoverage_SelectBinType_CtxCancel(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// optimizeFast — permutation actually improves and finds perfect (130-135)
+// optimizeFast - permutation actually improves and finds perfect (130-135)
 // ---------------------------------------------------------------------------
 
 // limitedEngine only places items when the first item is "key".
 // This simulates an engine sensitive to item order.
-type limitedEngine struct {
-	firstID string
-}
+type limitedEngine struct{}
 
 func (e *limitedEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	// If the bin is empty, only accept "key" as first item.
@@ -2270,7 +2241,7 @@ func TestCoverage_OptimizeFast_PermFindsAll(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// dfsFull — pruning and optimal-found paths (182, 195, 235)
+// dfsFull - pruning and optimal-found paths (182, 195, 235)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_DfsFull_PruningAndOptimal(t *testing.T) {
@@ -2310,7 +2281,7 @@ func TestCoverage_DfsFull_CountPruning(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// shakeSwap — weight check path (line 312-313)
+// shakeSwap - weight check path (line 312-313)
 // ---------------------------------------------------------------------------
 
 func TestCoverage_ShakeSwap_WeightCheckFails(t *testing.T) {
@@ -2334,13 +2305,14 @@ func TestCoverage_ShakeSwap_WeightCheckFails(t *testing.T) {
 	// Swap light(1) with heavy(9): bin0 -> anchor(9)+heavy(9)=18 > 10 FAIL
 	// Swap anchor(9) with heavy(9): bin0 -> light(1)+heavy(9)=10 ok, bin1 -> anchor(9) ok
 	// This exercises the weight check continue path.
-	result := shakeSwap(sol, items, binTypes)
-	// It may find the anchor<->heavy swap which is weight-valid.
-	_ = result
+	// It may find the anchor<->heavy swap, which must be weight-valid.
+	if result := shakeSwap(sol, items, binTypes); result != nil {
+		assertWithinCapacity(t, result, items, binTypes)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// Metaheuristic.Solve — inner loop ctx break (line 101)
+// Metaheuristic.Solve - inner loop ctx break (line 101)
 // This is hard to hit precisely since the outer loop also checks ctx.
 // Use a very tight scenario.
 // ---------------------------------------------------------------------------
@@ -2371,7 +2343,7 @@ func TestCoverage_MetaSolve_InnerLoopBreak(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// dfsFull — directly call dfsFull to exercise ctx cancel, pruning, optimal
+// dfsFull - directly call dfsFull to exercise ctx cancel, pruning, optimal
 // ---------------------------------------------------------------------------
 
 func TestCoverage_DfsFull_Direct_CtxCancel(t *testing.T) {
@@ -2396,7 +2368,10 @@ func TestCoverage_DfsFull_Direct_CtxCancel(t *testing.T) {
 	cancel()
 
 	bb.dfsFull(ctx, engine, bin, items, used, 0, best)
-	// Should return immediately due to ctx cancel.
+	// Should return immediately due to ctx cancel, without placing anything.
+	if best.count != 0 {
+		t.Errorf("best.count = %d, want 0 after cancelled context", best.count)
+	}
 }
 
 func TestCoverage_DfsFull_Direct_CountPruning(t *testing.T) {
@@ -2420,6 +2395,12 @@ func TestCoverage_DfsFull_Direct_CountPruning(t *testing.T) {
 
 	bb.dfsFull(context.Background(), engine, bin, items, used, 0, best)
 	// Should prune immediately since we can't beat best.count=3 with depth+remaining=3.
+	if best.count != 3 {
+		t.Errorf("best.count = %d, want 3 (unchanged after pruning)", best.count)
+	}
+	if len(bin.Items) != 0 {
+		t.Errorf("bin has %d items, want 0 (nothing placed when pruned)", len(bin.Items))
+	}
 }
 
 func TestCoverage_DfsFull_Direct_OptimalEarlyReturn(t *testing.T) {

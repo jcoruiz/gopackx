@@ -128,7 +128,7 @@ func scoreSolution(sol *solution, items []*model.Item, binTypes []*model.Bin) so
 	totalPct := 0.0
 	totalCost := 0.0
 	activeBins := 0
-	for b := 0; b < sol.nBins; b++ {
+	for b := range sol.nBins {
 		if binVols[b] > 0 {
 			activeBins++
 			totalPct += binVols[b] / binTypes[sol.binTypeIdx[b]].Volume * 100
@@ -214,7 +214,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 	// Find the bin with minimum fill ratio.
 	srcBin := -1
 	minFill := 2.0
-	for b := 0; b < sol.nBins; b++ {
+	for b := range sol.nBins {
 		vol := binFillVolume(sol, b, items)
 		if vol == 0 {
 			continue
@@ -242,7 +242,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 	// Try each item against each other bin.
 	for _, itemIdx := range srcItems {
 		item := items[itemIdx]
-		for b := 0; b < sol.nBins; b++ {
+		for b := range sol.nBins {
 			if b == srcBin {
 				continue
 			}
@@ -295,7 +295,7 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 		pairs[i], pairs[j] = pairs[j], pairs[i]
 	})
 
-	for x := 0; x < len(pairs)-1; x++ {
+	for x := range len(pairs) - 1 {
 		for y := x + 1; y < len(pairs); y++ {
 			p1, p2 := pairs[x], pairs[y]
 			if p1.binIdx == p2.binIdx {
@@ -350,7 +350,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 		fill float64
 	}
 	var ranked []binFill
-	for b := 0; b < sol.nBins; b++ {
+	for b := range sol.nBins {
 		vol := binFillVolume(sol, b, items)
 		if vol == 0 {
 			continue
@@ -384,7 +384,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine) *solution {
 	// Try different item orderings: volume desc, volume asc, and shuffled.
 	orderings := make([][]int, 3)
-	for o := 0; o < 3; o++ {
+	for o := range 3 {
 		ordering := make([]int, len(targetItems))
 		copy(ordering, targetItems)
 		switch o {
@@ -410,7 +410,7 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 
 		// Build destination bins with remapped indices (after removal).
 		destBins := make([]int, 0, newSol.nBins)
-		for b := 0; b < newSol.nBins; b++ {
+		for b := range newSol.nBins {
 			destBins = append(destBins, b)
 		}
 

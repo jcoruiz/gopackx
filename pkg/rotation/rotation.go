@@ -1,7 +1,11 @@
 // Package rotation provides rotation utilities and constraint checking for items.
 package rotation
 
-import "github.com/jcoruiz/gopackx/pkg/model"
+import (
+	"slices"
+
+	"github.com/jcoruiz/gopackx/pkg/model"
+)
 
 // matrix maps each RotationType to the index permutation of [width, height, depth].
 var matrix = [6][3]int{
@@ -41,10 +45,5 @@ func IsAllowed(item *model.Item, rt model.RotationType) bool {
 	if len(rots) == 0 {
 		return true // all rotations allowed
 	}
-	for _, r := range rots {
-		if r == rt {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rots, rt)
 }

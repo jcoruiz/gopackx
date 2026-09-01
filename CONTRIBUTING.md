@@ -18,6 +18,15 @@ go test ./...
 go test ./pkg/solver/ -bench=. -benchmem
 ```
 
+### Linting
+
+CI runs [golangci-lint](https://golangci-lint.run) v2 with the configuration in `.golangci.yml`. Install it locally following the [official instructions](https://golangci-lint.run/docs/welcome/install/) and run:
+
+```bash
+golangci-lint run
+golangci-lint fmt
+```
+
 ### Checking coverage
 
 ```bash
@@ -38,7 +47,7 @@ This project follows the [Uber Go Style Guide](https://github.com/uber-go/guide/
 
 ## Releasing a New Version
 
-GoPackX uses semantic versioning. Tags go directly on `main` — this is the standard approach for Go libraries since `go get` resolves tags from the default branch.
+GoPackX uses semantic versioning. Tags go directly on `main` - this is the standard approach for Go libraries since `go get` resolves tags from the default branch.
 
 ### Steps
 

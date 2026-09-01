@@ -4,6 +4,7 @@ package model
 // Axis represents a spatial axis.
 type Axis int
 
+// Spatial axes, used to index [width, height, depth] dimension arrays.
 const (
 	WidthAxis  Axis = 0
 	HeightAxis Axis = 1
@@ -13,6 +14,8 @@ const (
 // RotationType represents one of 6 possible orientations of an item.
 type RotationType int
 
+// Rotation types. Each name lists which physical dimension maps to the
+// width, height and depth axes, in that order.
 const (
 	RotationWHD RotationType = 0 // width, height, depth (default)
 	RotationHWD RotationType = 1 // height, width, depth

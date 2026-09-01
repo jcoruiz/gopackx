@@ -1,7 +1,7 @@
 # GoPackX
 
 [![CI](https://github.com/jcoruiz/gopackx/actions/workflows/ci.yml/badge.svg)](https://github.com/jcoruiz/gopackx/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jcoruiz/gopackx)](https://goreportcard.com/report/github.com/jcoruiz/gopackx)
+[![golangci-lint](https://github.com/jcoruiz/gopackx/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/jcoruiz/gopackx/actions/workflows/golangci-lint.yml)
 [![codecov](https://codecov.io/gh/jcoruiz/gopackx/branch/main/graph/badge.svg)](https://codecov.io/gh/jcoruiz/gopackx)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jcoruiz/gopackx.svg)](https://pkg.go.dev/github.com/jcoruiz/gopackx)
 
@@ -9,17 +9,17 @@ A high-performance 3D bin packing library for Go with variable-sized box selecti
 
 ## Features
 
-- **Variable-sized bin packing** — automatically selects which box types to use and how many, minimizing total boxes or total cost
-- **Cross-bin optimization** — VNS metaheuristic redistributes items across bins to find solutions greedy approaches miss
-- **Multiple placement engines** — Pivot Points, Extreme Points, MaxRects, and LAFF (Largest Area Fit First)
-- **7 packing strategies** — BestFitDecreasing, MinimizeBins, BestFit, Greedy, NextFit, WorstFit, AlmostWorstFit
-- **Advanced solvers** — TrialPacking, Metaheuristic, Branch & Bound (exact), and Parallel multi-config solver
-- **Cost optimization** — assign costs per box type; solvers minimize total cost instead of box count
-- **Physical constraints** — weight limits, load-bearing capacity, fragile items, stability checks, gravity center analysis
+- **Variable-sized bin packing** - automatically selects which box types to use and how many, minimizing total boxes or total cost
+- **Cross-bin optimization** - VNS metaheuristic redistributes items across bins to find solutions greedy approaches miss
+- **Multiple placement engines** - Pivot Points, Extreme Points, MaxRects, and LAFF (Largest Area Fit First)
+- **7 packing strategies** - BestFitDecreasing, MinimizeBins, BestFit, Greedy, NextFit, WorstFit, AlmostWorstFit
+- **Advanced solvers** - TrialPacking, Metaheuristic, Branch & Bound (exact), and Parallel multi-config solver
+- **Cost optimization** - assign costs per box type; solvers minimize total cost instead of box count
+- **Physical constraints** - weight limits, load-bearing capacity, fragile items, stability checks, gravity center analysis
 - **6 rotation types** with support for upright-only and custom rotation restrictions
-- **Fix-point correction** — automatically compacts items toward the origin for tighter packing
-- **Context-aware** — all operations respect `context.Context` for cancellation and deadlines
-- **Zero dependencies** — only the Go standard library
+- **Fix-point correction** - automatically compacts items toward the origin for tighter packing
+- **Context-aware** - all operations respect `context.Context` for cancellation and deadlines
+- **Zero dependencies** - only the Go standard library
 
 ## Installation
 
@@ -45,7 +45,7 @@ import (
 )
 
 func main() {
-	// Available box types (used as templates — solver creates instances as needed)
+	// Available box types (used as templates - solver creates instances as needed)
 	boxes := []*model.Bin{
 		model.NewBin("Small Box", 30, 25, 20, 5),
 		model.NewBin("Medium Box", 40, 35, 30, 15),
@@ -163,16 +163,16 @@ p := packer.NewPacker(packer.WithStrategy(strategy.MinimizeBins))
 ```go
 import "github.com/jcoruiz/gopackx/pkg/placement"
 
-// Pivot Points (default) — fast, corner-based candidates
+// Pivot Points (default) - fast, corner-based candidates
 p := packer.NewPacker(packer.WithPlacementEngine(placement.NewPivotEngine()))
 
-// Extreme Points — scored placement with space/support metadata
+// Extreme Points - scored placement with space/support metadata
 p := packer.NewPacker(packer.WithPlacementEngine(placement.NewExtremePointEngine()))
 
-// LAFF — level-based horizontal stacking
+// LAFF - level-based horizontal stacking
 p := packer.NewPacker(packer.WithPlacementEngine(placement.NewLAFFEngine()))
 
-// LAFF Fast — 2D-only within levels
+// LAFF Fast - 2D-only within levels
 p := packer.NewPacker(packer.WithPlacementEngine(placement.NewLAFFEngine(placement.LAFFFast())))
 ```
 
@@ -191,19 +191,19 @@ engine := placement.NewExtremePointEngine(placement.WithEPStability(0.7))
 ```go
 import "github.com/jcoruiz/gopackx/pkg/solver"
 
-// TrialPacking — variable-sized bin packing with simulated bin selection
+// TrialPacking - variable-sized bin packing with simulated bin selection
 tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
 result, _ := tp.Solve(ctx, binTypes, items)
 
-// Metaheuristic — cross-bin optimization via VNS
+// Metaheuristic - cross-bin optimization via VNS
 m := solver.NewMetaheuristic(engineFactory)
 result, _ := m.Solve(ctx, binTypes, items)
 
-// Branch & Bound — exhaustive per-bin optimization
+// Branch & Bound - exhaustive per-bin optimization
 bb := solver.NewBranchBound(engineFactory)
 result, _ := bb.Solve(ctx, bins, items)
 
-// Parallel — runs multiple engine/strategy combos concurrently
+// Parallel - runs multiple engine/strategy combos concurrently
 ps := solver.NewParallel()
 result, _ := ps.Solve(ctx, bins, items)
 ```
@@ -229,6 +229,12 @@ pkg/
 
 ```bash
 go test ./...
+```
+
+Linting uses [golangci-lint](https://golangci-lint.run) with the configuration in `.golangci.yml`:
+
+```bash
+golangci-lint run
 ```
 
 ## License

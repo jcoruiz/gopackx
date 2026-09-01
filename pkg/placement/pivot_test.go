@@ -73,7 +73,7 @@ func TestPlaceNoIntersections(t *testing.T) {
 	engine := NewPivotEngine()
 	bin := model.NewBin("box", 30, 30, 30, 1000)
 
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		item := model.NewItem("i", 10, 10, 10, 1)
 		if !engine.PlaceItem(bin, item) {
 			// Not all may fit; that's OK.
@@ -82,7 +82,7 @@ func TestPlaceNoIntersections(t *testing.T) {
 	}
 
 	// Verify no pair intersects.
-	for i := 0; i < len(bin.Items); i++ {
+	for i := range len(bin.Items) {
 		for j := i + 1; j < len(bin.Items); j++ {
 			if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 				t.Errorf("items %d and %d intersect", i, j)
@@ -95,7 +95,7 @@ func TestPlaceWithinBounds(t *testing.T) {
 	engine := NewPivotEngine()
 	bin := model.NewBin("box", 30, 30, 30, 1000)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		item := model.NewItem("i", 10, 10, 10, 1)
 		engine.PlaceItem(bin, item)
 	}
@@ -191,7 +191,7 @@ func TestPlaceWithStabilityRejectsUnsupported(t *testing.T) {
 		t.Fatal("failed to place base item")
 	}
 
-	// Try to place a much wider item on top — only partially supported.
+	// Try to place a much wider item on top - only partially supported.
 	wide := model.NewItem("wide", 30, 10, 30, 3)
 	placed := engine.PlaceItem(bin, wide)
 

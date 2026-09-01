@@ -56,14 +56,14 @@ func TestEPNoIntersections(t *testing.T) {
 	engine := NewExtremePointEngine()
 	bin := model.NewBin("box", 30, 30, 30, 1000)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		item := model.NewItem("i", 10, 10, 10, 1)
 		if !engine.PlaceItem(bin, item) {
 			break
 		}
 	}
 
-	for i := 0; i < len(bin.Items); i++ {
+	for i := range len(bin.Items) {
 		for j := i + 1; j < len(bin.Items); j++ {
 			if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 				t.Errorf("items %d and %d intersect", i, j)
@@ -76,7 +76,7 @@ func TestEPWithinBounds(t *testing.T) {
 	engine := NewExtremePointEngine()
 	bin := model.NewBin("box", 30, 30, 30, 1000)
 
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		item := model.NewItem("i", 10, 10, 10, 1)
 		engine.PlaceItem(bin, item)
 	}

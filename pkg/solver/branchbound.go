@@ -185,22 +185,13 @@ func (bb *BranchBound) dfsFull(
 
 	// Pruning: can't beat best even placing all remaining items.
 	remaining := 0
-	remainingVol := 0.0
-	for i, u := range used {
+	for _, u := range used {
 		if !u {
 			remaining++
-			remainingVol += items[i].Volume
 		}
 	}
 	if depth+remaining <= best.count {
 		return
-	}
-
-	// Volume pruning: remaining items can't physically fit.
-	binFreeVol := parentBin.Volume - parentBin.UsedVolume()
-	if remainingVol > binFreeVol && depth == 0 {
-		// Only apply at root to avoid expensive recomputation. At deeper levels,
-		// the count-based pruning is sufficient.
 	}
 
 	for i := range items {

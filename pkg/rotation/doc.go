@@ -12,7 +12,7 @@
 // of base dimensions and a rotation type:
 //
 //	dims := rotation.Dimensions(10, 20, 30, model.RotationHWD)
-//	// dims = [20, 10, 30] — height and width are swapped
+//	// dims = [20, 10, 30] - height and width are swapped
 //
 // [DimensionsFor] is a convenience that takes an [model.Item] and a rotation
 // type, returning the dimensions the item would have under that rotation

@@ -89,7 +89,7 @@ func TestMetaheuristic_Order9904(t *testing.T) {
 
 			// Verify no intersections.
 			for _, bin := range result.Bins {
-				for i := 0; i < len(bin.Items); i++ {
+				for i := range len(bin.Items) {
 					for j := i + 1; j < len(bin.Items); j++ {
 						if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 							t.Errorf("INTERSECTION in %s: %s and %s", bin.ID, bin.Items[i].ID, bin.Items[j].ID)
@@ -115,10 +115,10 @@ func TestMetaheuristic_SmallItemsTail(t *testing.T) {
 	}
 
 	var items []*model.Item
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		items = append(items, model.NewItem("big", 55, 55, 55, 1))
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		items = append(items, model.NewItem("small", 15, 15, 15, 1))
 	}
 
@@ -161,7 +161,7 @@ func TestMetaheuristic_NoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("items %d and %d intersect in bin %s", i, j, bin.ID)
@@ -252,14 +252,14 @@ func TestMetaheuristic_AtLeastAsGoodAsSeed(t *testing.T) {
 // --- Benchmarks ---
 
 func BenchmarkMetaheuristic_Order9904(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		m := NewMetaheuristic(func() placement.Engine { return placement.NewPivotEngine() })
-		m.Solve(context.Background(), order9904BinTypes(), order9904Items())
+		_, _ = m.Solve(context.Background(), order9904BinTypes(), order9904Items())
 	}
 }
 
 func BenchmarkMetaheuristic_20Items3BinTypes(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		m := NewMetaheuristic(func() placement.Engine { return placement.NewPivotEngine() })
 		binTypes := []*model.Bin{
 			model.NewBin("small", 30, 30, 30, 1000),
@@ -273,6 +273,6 @@ func BenchmarkMetaheuristic_20Items3BinTypes(b *testing.B) {
 			d := float64(5 + (j*13)%10)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		m.Solve(context.Background(), binTypes, items)
+		_, _ = m.Solve(context.Background(), binTypes, items)
 	}
 }

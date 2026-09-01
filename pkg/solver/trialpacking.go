@@ -77,7 +77,6 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	for len(remaining) > 0 {
 		if ctx.Err() != nil {
 			unfitted = append(unfitted, remaining...)
-			remaining = nil
 			break
 		}
 
@@ -214,8 +213,6 @@ func (tp *TrialPacking) runTrial(binType *model.Bin, remaining []*model.Item, ty
 // plus a lower-bound estimate for the items that didn't fit in the trial.
 func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*model.Item, score trialScore) float64 {
 	// Calculate remaining volume and weight after this trial bin.
-	leftoverVol := 0.0
-	leftoverWeight := 0.0
 	leftoverCount := len(remaining) - score.fittedCount
 
 	if leftoverCount <= 0 {
@@ -235,8 +232,8 @@ func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*mo
 
 	// Volume that was packed in the trial.
 	packedVol := score.fillRatio * binTypes[score.binTypeIdx].Volume
-	leftoverVol = totalVol - packedVol
-	leftoverWeight = totalWeight // conservative: ignore weight packed
+	leftoverVol := totalVol - packedVol
+	leftoverWeight := totalWeight // conservative: ignore weight packed
 
 	// Find the largest bin type for the lower bound.
 	maxBinVol := 0.0

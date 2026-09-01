@@ -53,7 +53,7 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	for _, rt := range rotations {
 		dim := rotation.DimensionsFor(item, rt)
 		dup := false
-		for j := 0; j < nRot; j++ {
+		for j := range nRot {
 			if rds[j].dim == dim {
 				dup = true
 				break
@@ -77,7 +77,7 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	writeIdx := 0
 
 	for _, pivot := range pivots {
-		for ri := 0; ri < nRot; ri++ {
+		for ri := range nRot {
 			dim := rds[ri].dim
 
 			px1 := pivot[0] + dim[0]
@@ -89,7 +89,7 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 			// Conflict-driven pre-rejection from stack-cached blockers.
 			blocked := false
-			for bi := 0; bi < nBlockers; bi++ {
+			for bi := range nBlockers {
 				b := &blockers[bi]
 				if pivot[0] < b[3]-epsilon && b[0] < px1-epsilon &&
 					pivot[1] < b[4]-epsilon && b[1] < py1-epsilon &&

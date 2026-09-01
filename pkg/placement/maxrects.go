@@ -85,7 +85,7 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	for _, rt := range rots {
 		dim := rotation.DimensionsFor(item, rt)
 		dup := false
-		for j := 0; j < nRot; j++ {
+		for j := range nRot {
 			if rds[j].dim == dim {
 				dup = true
 				break
@@ -106,7 +106,7 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 	for si := range e.spaces {
 		s := &e.spaces[si]
-		for ri := 0; ri < nRot; ri++ {
+		for ri := range nRot {
 			dim := rds[ri].dim
 			if dim[0] > s.w+epsilon || dim[1] > s.h+epsilon || dim[2] > s.d+epsilon {
 				continue
@@ -280,7 +280,7 @@ func (e *MaxRectsEngine) pruneContained() {
 		siy1 := si.y + si.h
 		siz1 := si.z + si.d
 
-		for j := 0; j < n; j++ {
+		for j := range n {
 			if i == j {
 				continue
 			}
