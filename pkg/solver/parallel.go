@@ -75,7 +75,6 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 	var wg sync.WaitGroup
 
 	for _, cfg := range p.configs {
-		cfg := cfg
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

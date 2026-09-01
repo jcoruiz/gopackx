@@ -11,6 +11,8 @@ import (
 // Type represents a packing strategy.
 type Type int
 
+// Available packing strategies. The comments describe the item ordering
+// (by volume) and the bin selection rule each strategy applies.
 const (
 	MinimizeBins      Type = iota // Vol desc, First Fit
 	Greedy                        // Vol asc, First Fit
@@ -25,7 +27,7 @@ const (
 // 1. Volume (direction depends on strategy)
 // 2. Load-bearing desc (sturdy items first)
 // 3. Priority asc (1=highest)
-// 4. Group (keep binding groups together)
+// 4. Group (keep binding groups together).
 func SortItems(items []*model.Item, st Type) {
 	volDesc := st == MinimizeBins || st == BestFitDecreasing
 

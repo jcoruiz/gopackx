@@ -132,8 +132,7 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 					noImprove = 0
 				}
 
-				k = 0 // restart from lightest neighborhood (VNS)
-				break
+				break // restart from lightest neighborhood (VNS); outer loop resets k
 			}
 			k++
 		}
@@ -192,7 +191,7 @@ func (m *Metaheuristic) materialize(sol *solution, items []*model.Item, binTypes
 	var resultBins []*model.Bin
 	var unfitted []*model.Item
 
-	for b := 0; b < sol.nBins; b++ {
+	for b := range sol.nBins {
 		bItemIdxs := itemsInBin(sol, b)
 		if len(bItemIdxs) == 0 {
 			continue

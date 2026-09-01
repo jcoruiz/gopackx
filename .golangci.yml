@@ -1,0 +1,45 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - copyloopvar
+    - dupword
+    - errorlint
+    - gocritic
+    - godot
+    - gosec
+    - intrange
+    - misspell
+    - modernize
+    - nilnil
+    - nolintlint
+    - perfsprint
+    - predeclared
+    - revive
+    - testableexamples
+    - thelper
+    - tparallel
+    - unconvert
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+  settings:
+    gosec:
+      excludes:
+        - G404 # math/rand is intentional: no cryptographic use in this library
+        - G602 # slice bounds: false positives on parallel slices indexed together
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jcoruiz/gopackx

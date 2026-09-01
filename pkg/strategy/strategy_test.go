@@ -189,7 +189,7 @@ func TestSortBinsForItemAlmostWorstFit(t *testing.T) {
 	full := model.NewBin("full", 20, 20, 20, 500)                   // will place items
 
 	// Fill "partial" to ~50% usage.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		filler := model.NewItem("f", 25, 25, 25, 1)
 		filler.Position = [3]float64{float64(i%2) * 25, 0, float64(i/2) * 25}
 		partiallyFilled.PlaceItem(filler)

@@ -23,10 +23,10 @@
 // For fine-grained control over placement engines, strategies, and solver
 // parameters, use the lower-level packages directly:
 //
-//   - [github.com/jcoruiz/gopackx/pkg/packer] — simple packing into pre-created bins
-//   - [github.com/jcoruiz/gopackx/pkg/solver] — advanced solvers (TrialPacking, Metaheuristic, BranchBound, Parallel)
-//   - [github.com/jcoruiz/gopackx/pkg/placement] — placement engines (Pivot, ExtremePoint, MaxRects, LAFF)
-//   - [github.com/jcoruiz/gopackx/pkg/strategy] — item ordering and bin selection strategies
+//   - [github.com/jcoruiz/gopackx/pkg/packer] - simple packing into pre-created bins
+//   - [github.com/jcoruiz/gopackx/pkg/solver] - advanced solvers (TrialPacking, Metaheuristic, BranchBound, Parallel)
+//   - [github.com/jcoruiz/gopackx/pkg/placement] - placement engines (Pivot, ExtremePoint, MaxRects, LAFF)
+//   - [github.com/jcoruiz/gopackx/pkg/strategy] - item ordering and bin selection strategies
 package gopackx
 
 import (

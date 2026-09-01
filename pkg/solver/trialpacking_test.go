@@ -27,10 +27,10 @@ func TestTrialPacking_SmallItemsTailPacking(t *testing.T) {
 	}
 
 	var items []*model.Item
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		items = append(items, model.NewItem("big", 55, 55, 55, 1))
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		items = append(items, model.NewItem("small", 15, 15, 15, 1))
 	}
 
@@ -151,7 +151,7 @@ func TestTrialPacking_NoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("bin %q: items %d and %d intersect", bin.ID, i, j)
@@ -314,7 +314,7 @@ func TestTrialPacking_CostVsBinCount(t *testing.T) {
 }
 
 func TestTrialPacking_CostRespectsWeight(t *testing.T) {
-	// Cheap bin has low weight capacity — heavy items can't use it.
+	// Cheap bin has low weight capacity - heavy items can't use it.
 	// The solver must pick the expensive bin for heavy items and cheap for light.
 	tp := NewTrialPacking(newPivot, WithLookahead())
 
@@ -324,8 +324,8 @@ func TestTrialPacking_CostRespectsWeight(t *testing.T) {
 	}
 
 	items := []*model.Item{
-		model.NewItem("heavy", 20, 20, 20, 10), // 10 kg — only fits in expensive
-		model.NewItem("light", 20, 20, 20, 1),  // 1 kg — fits in cheap
+		model.NewItem("heavy", 20, 20, 20, 10), // 10 kg - only fits in expensive
+		model.NewItem("light", 20, 20, 20, 1),  // 1 kg - fits in cheap
 	}
 
 	result, err := tp.Solve(context.Background(), binTypes, items)
@@ -338,7 +338,7 @@ func TestTrialPacking_CostRespectsWeight(t *testing.T) {
 	}
 
 	// Should use 1 expensive (for heavy) + 1 cheap (for light) = $90.
-	// NOT 1 expensive for both ($80) — because the cheap bin is cheaper for the light item.
+	// NOT 1 expensive for both ($80) - because the cheap bin is cheaper for the light item.
 	// Actually, both fit in the expensive bin (20+20=40 < 50 in geometry, 10+1=11 < 50 in weight).
 	// But the cost-optimal solution depends on whether 1×$80 < 1×$80+1×$10.
 	// 1 expensive = $80, 2 bins (1 expensive + 1 cheap) = $90. So 1 expensive is cheaper.
@@ -403,10 +403,10 @@ func TestTrialPackingLookahead_ReducesBins(t *testing.T) {
 	}
 
 	var items []*model.Item
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		items = append(items, model.NewItem("big", 55, 55, 55, 1))
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		items = append(items, model.NewItem("small", 15, 15, 15, 1))
 	}
 
@@ -457,7 +457,7 @@ func TestTrialPackingLookahead_NoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("bin %q: items %d and %d intersect", bin.ID, i, j)
@@ -470,7 +470,7 @@ func TestTrialPackingLookahead_NoIntersections(t *testing.T) {
 // --- Benchmarks ---
 
 func BenchmarkTrialPacking20Items3BinTypes(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		tp := NewTrialPacking(newPivot)
 		binTypes := []*model.Bin{
 			model.NewBin("small", 30, 30, 30, 1000),
@@ -484,12 +484,12 @@ func BenchmarkTrialPacking20Items3BinTypes(b *testing.B) {
 			d := float64(5 + (j*13)%10)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		tp.Solve(context.Background(), binTypes, items)
+		_, _ = tp.Solve(context.Background(), binTypes, items)
 	}
 }
 
 func BenchmarkTrialPackingLookahead20Items3BinTypes(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		tp := NewTrialPacking(newPivot, WithLookahead())
 		binTypes := []*model.Bin{
 			model.NewBin("small", 30, 30, 30, 1000),
@@ -503,12 +503,12 @@ func BenchmarkTrialPackingLookahead20Items3BinTypes(b *testing.B) {
 			d := float64(5 + (j*13)%10)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		tp.Solve(context.Background(), binTypes, items)
+		_, _ = tp.Solve(context.Background(), binTypes, items)
 	}
 }
 
 func BenchmarkTrialPacking50Items5BinTypes(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		tp := NewTrialPacking(newPivot)
 		binTypes := []*model.Bin{
 			model.NewBin("xs", 20, 20, 20, 1000),
@@ -524,12 +524,12 @@ func BenchmarkTrialPacking50Items5BinTypes(b *testing.B) {
 			d := float64(5 + (j*13)%15)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		tp.Solve(context.Background(), binTypes, items)
+		_, _ = tp.Solve(context.Background(), binTypes, items)
 	}
 }
 
 func BenchmarkTrialPackingLookahead50Items5BinTypes(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		tp := NewTrialPacking(newPivot, WithLookahead())
 		binTypes := []*model.Bin{
 			model.NewBin("xs", 20, 20, 20, 1000),
@@ -545,7 +545,7 @@ func BenchmarkTrialPackingLookahead50Items5BinTypes(b *testing.B) {
 			d := float64(5 + (j*13)%15)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		tp.Solve(context.Background(), binTypes, items)
+		_, _ = tp.Solve(context.Background(), binTypes, items)
 	}
 }
 
@@ -571,7 +571,7 @@ func BenchmarkComparison_Greedy_vs_Trial(b *testing.B) {
 	}
 
 	b.Run("Greedy_BFD", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			bins := makeBins()
 			items := makeItems()
 			packGreedy(context.Background(), newPivot(), bins, items, strategy.BestFitDecreasing)
@@ -579,16 +579,16 @@ func BenchmarkComparison_Greedy_vs_Trial(b *testing.B) {
 	})
 
 	b.Run("TrialPacking", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			tp := NewTrialPacking(newPivot)
-			tp.Solve(context.Background(), makeBins(), makeItems())
+			_, _ = tp.Solve(context.Background(), makeBins(), makeItems())
 		}
 	})
 
 	b.Run("TrialPacking_Lookahead", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			tp := NewTrialPacking(newPivot, WithLookahead())
-			tp.Solve(context.Background(), makeBins(), makeItems())
+			_, _ = tp.Solve(context.Background(), makeBins(), makeItems())
 		}
 	})
 }

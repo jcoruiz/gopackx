@@ -88,7 +88,7 @@ const epsilon = 1e-6
 func aabbOverlap(a, b *model.Item) bool {
 	da := a.Dimension()
 	db := b.Dimension()
-	for axis := 0; axis < 3; axis++ {
+	for axis := range 3 {
 		aMin := a.Position[axis]
 		aMax := aMin + da[axis]
 		bMin := b.Position[axis]
@@ -103,7 +103,7 @@ func aabbOverlap(a, b *model.Item) bool {
 func checkNoIntersections(t *testing.T, bins []*model.Bin) {
 	t.Helper()
 	for _, bin := range bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if aabbOverlap(bin.Items[i], bin.Items[j]) {
 					t.Errorf("bin %s: items %d (%s) and %d (%s) intersect\n  pos1=%v dim1=%v\n  pos2=%v dim2=%v",
@@ -336,7 +336,7 @@ func TestProperty_ManySmallItemsTightBin(t *testing.T) {
 	}
 }
 
-// TestProperty_IdenticalItems packs identical cubes — a case where packing
+// TestProperty_IdenticalItems packs identical cubes - a case where packing
 // is geometrically deterministic.
 func TestProperty_IdenticalItems(t *testing.T) {
 	for _, eng := range engines {
@@ -345,7 +345,7 @@ func TestProperty_IdenticalItems(t *testing.T) {
 			p.AddBin(model.NewBin("box", 20, 20, 20, 1000))
 
 			nItems := 8
-			for i := 0; i < nItems; i++ {
+			for i := range nItems {
 				p.AddItem(model.NewItem(fmt.Sprintf("cube%d", i), 10, 10, 10, 1))
 			}
 
@@ -378,7 +378,7 @@ func TestProperty_FragileItems(t *testing.T) {
 				p.AddBin(model.NewBin("box", 50, 50, 50, 1000))
 
 				nItems := 15
-				for i := 0; i < nItems; i++ {
+				for i := range nItems {
 					w := 5 + rng.Float64()*15
 					h := 5 + rng.Float64()*15
 					d := 5 + rng.Float64()*15
@@ -410,7 +410,7 @@ func TestProperty_UprightItems(t *testing.T) {
 			p.AddBin(model.NewBin("box", 60, 60, 60, 1000))
 
 			nItems := 20
-			for i := 0; i < nItems; i++ {
+			for i := range nItems {
 				w := 5 + rng.Float64()*20
 				h := 5 + rng.Float64()*20
 				d := 5 + rng.Float64()*20
@@ -484,7 +484,7 @@ func TestProperty_StabilityConstraints(t *testing.T) {
 				p.AddBin(model.NewBin("box", 60, 60, 60, 1000))
 
 				nItems := 15
-				for i := 0; i < nItems; i++ {
+				for i := range nItems {
 					w := 5 + rng.Float64()*20
 					h := 5 + rng.Float64()*15
 					d := 5 + rng.Float64()*20
@@ -523,7 +523,7 @@ func TestProperty_MixedConstraints(t *testing.T) {
 				p.AddBin(model.NewBin("box", 80, 80, 80, 500))
 
 				nItems := 20
-				for i := 0; i < nItems; i++ {
+				for i := range nItems {
 					w := 5 + rng.Float64()*25
 					h := 5 + rng.Float64()*20
 					d := 5 + rng.Float64()*25
@@ -565,7 +565,7 @@ func TestProperty_MultipleBins(t *testing.T) {
 			rng := rand.New(rand.NewSource(42))
 
 			p := packer.NewPacker(packer.WithPlacementEngine(eng.new()))
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				w := 30 + rng.Float64()*70
 				h := 30 + rng.Float64()*70
 				d := 30 + rng.Float64()*70
@@ -599,7 +599,7 @@ func TestProperty_ExtremeAspectRatios(t *testing.T) {
 			p.AddBin(model.NewBin("box", 100, 100, 100, 1000))
 
 			nItems := 15
-			for i := 0; i < nItems; i++ {
+			for i := range nItems {
 				var w, h, d float64
 				switch rng.Intn(3) {
 				case 0: // thin rod
@@ -629,12 +629,12 @@ func TestProperty_SingleItemPerBin(t *testing.T) {
 		t.Run(eng.name, func(t *testing.T) {
 			p := packer.NewPacker(packer.WithPlacementEngine(eng.new()))
 
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				p.AddBin(model.NewBin(fmt.Sprintf("bin%d", i), 10, 10, 10, 100))
 			}
 			// Each item fills an entire bin.
 			nItems := 5
-			for i := 0; i < nItems; i++ {
+			for i := range nItems {
 				p.AddItem(model.NewItem(fmt.Sprintf("i%d", i), 10, 10, 10, 1))
 			}
 
@@ -839,7 +839,7 @@ func FuzzPack(f *testing.F) {
 		p := packer.NewPacker()
 		p.AddBin(model.NewBin("box", bw, bh, bd, 10000))
 
-		for i := 0; i < nItems; i++ {
+		for i := range nItems {
 			w := 1 + rng.Float64()*(bw/2)
 			h := 1 + rng.Float64()*(bh/2)
 			d := 1 + rng.Float64()*(bd/2)

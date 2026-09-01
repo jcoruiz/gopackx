@@ -6,17 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.22', '1.23']
+        # Oldest supported (go.mod), previous stable and current stable.
+        go-version: ['1.22', 'oldstable', 'stable']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -27,12 +31,12 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Coverage
-        if: matrix.go-version == '1.23'
+        if: matrix.go-version == 'stable'
         run: go test $(go list ./... | grep -v examples) -coverprofile=coverage.out
 
       - name: Upload coverage
-        if: matrix.go-version == '1.23'
-        uses: codecov/codecov-action@v5
+        if: matrix.go-version == 'stable'
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out

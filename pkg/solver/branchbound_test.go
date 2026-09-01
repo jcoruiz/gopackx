@@ -130,7 +130,7 @@ func TestBBNoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("items %d and %d intersect in bin %s", i, j, bin.ID)
@@ -190,7 +190,7 @@ func TestBBFullDFS(t *testing.T) {
 }
 
 func TestBBFullBetterThanFast(t *testing.T) {
-	// Scenario where rotation selection matters — full should be >= fast.
+	// Scenario where rotation selection matters - full should be >= fast.
 	binSpec := model.NewBin("box", 30, 20, 15, 1000)
 
 	items := []*model.Item{
@@ -380,19 +380,19 @@ func TestNextPermutationSingle(t *testing.T) {
 }
 
 func BenchmarkBBFast6Items(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bb := NewBranchBound(pivotFactory)
 		bins := []*model.Bin{model.NewBin("box", 30, 30, 30, 1000)}
 		items := make([]*model.Item, 6)
 		for j := range items {
 			items[j] = model.NewItem("i", 10, 10, 10, 1)
 		}
-		bb.Solve(context.Background(), bins, items)
+		_, _ = bb.Solve(context.Background(), bins, items)
 	}
 }
 
 func BenchmarkBBFast8Items(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bb := NewBranchBound(pivotFactory)
 		bins := []*model.Bin{model.NewBin("box", 30, 30, 30, 1000)}
 		items := make([]*model.Item, 8)
@@ -402,18 +402,18 @@ func BenchmarkBBFast8Items(b *testing.B) {
 			d := float64(4 + (j*7)%9)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		bb.Solve(context.Background(), bins, items)
+		_, _ = bb.Solve(context.Background(), bins, items)
 	}
 }
 
 func BenchmarkBBFull6Items(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bb := NewBranchBound(pivotFactory, BBFull())
 		bins := []*model.Bin{model.NewBin("box", 30, 30, 30, 1000)}
 		items := make([]*model.Item, 6)
 		for j := range items {
 			items[j] = model.NewItem("i", 10, 10, 10, 1)
 		}
-		bb.Solve(context.Background(), bins, items)
+		_, _ = bb.Solve(context.Background(), bins, items)
 	}
 }

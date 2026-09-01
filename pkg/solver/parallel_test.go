@@ -47,7 +47,7 @@ func TestParallelNoIntersections(t *testing.T) {
 	}
 
 	for _, bin := range result.Bins {
-		for i := 0; i < len(bin.Items); i++ {
+		for i := range len(bin.Items) {
 			for j := i + 1; j < len(bin.Items); j++ {
 				if intersection.Intersect(bin.Items[i], bin.Items[j]) {
 					t.Errorf("items %d and %d intersect", i, j)
@@ -154,7 +154,7 @@ func TestParallelCustomConfigs(t *testing.T) {
 }
 
 func BenchmarkParallel50Items(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		p := NewParallel()
 		bins := []*model.Bin{
 			model.NewBin("b1", 100, 100, 100, 10000),
@@ -167,6 +167,6 @@ func BenchmarkParallel50Items(b *testing.B) {
 			d := float64(5 + (j*13)%10)
 			items[j] = model.NewItem("i", w, h, d, 1)
 		}
-		p.Solve(context.Background(), bins, items)
+		_, _ = p.Solve(context.Background(), bins, items)
 	}
 }
