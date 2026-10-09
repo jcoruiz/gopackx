@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 (unreleased)
+## v0.3.0 (2026-10-09)
 
 This release fixes physical rules that packings could break, makes results deterministic and consistent across solvers, and speeds up the stateful engines. Several behaviors change: read **Breaking changes** before upgrading.
 
