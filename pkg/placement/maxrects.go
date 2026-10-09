@@ -1,11 +1,10 @@
 package placement
 
 import (
-	"math"
+	"sort"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/rotation"
-	"github.com/jcoruiz/gopackx/pkg/stability"
 )
 
 // Verify interface compliance.
@@ -60,6 +59,8 @@ func (e *MaxRectsEngine) initBin(bin *model.Bin) {
 }
 
 // PlaceItem attempts to place an item using maximal rectangles with gravity.
+// Candidate spots are tried from the best score down until one passes the
+// full placement check (overlap, fragile items, load limits, stability).
 func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	if e.bin != bin {
 		e.initBin(bin)
@@ -97,12 +98,13 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 		}
 	}
 
-	// Find all valid placements and pick the best.
-	bestScore := math.Inf(1)
-	found := false
-	var bestRT model.RotationType
-	var bestDim [3]float64
-	var bestPos [3]float64
+	type candidate struct {
+		score float64
+		rt    model.RotationType
+		dim   [3]float64
+		pos   [3]float64
+	}
+	var candidates []candidate
 
 	for si := range e.spaces {
 		s := &e.spaces[si]
@@ -131,81 +133,30 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				shortSide = dz
 			}
 			score := pos[1]*1e10 + shortSide*1e6 + pos[2]*100 + pos[0]
-
-			if score < bestScore {
-				bestScore = score
-				found = true
-				bestRT = rds[ri].rt
-				bestDim = dim
-				bestPos = pos
-			}
+			candidates = append(candidates, candidate{score, rds[ri].rt, dim, pos})
 		}
 	}
 
-	if !found {
-		return false
+	// Stable sort keeps the space order for equal scores, as before.
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].score < candidates[j].score })
+
+	for _, c := range candidates {
+		item.RotationType = c.rt
+		item.Position = c.pos
+		// Gravity can move a spot onto other items; the full check covers it.
+		if !canPlaceDim(bin, item, c.dim, e.enableStability, e.supportRatio) {
+			continue
+		}
+		bin.PlaceItem(item)
+		e.splitSpaces(c.pos, c.dim)
+		return true
 	}
 
-	item.RotationType = bestRT
-	item.Position = bestPos
-
-	// Verify no intersection (gravity might create overlap).
-	if !canPlaceDim(bin, item, bestDim, false, 0) {
-		item.RotationType = origRT
-		item.Position = origPos
-		return false
-	}
-
-	// Fragile check.
-	for _, placed := range bin.Items {
-		if placed.Fragile {
-			pDim := placed.PlacedDim
-			pPos := placed.Position
-			placedTop := pPos[1] + pDim[1]
-			if math.Abs(bestPos[1]-placedTop) <= epsilon {
-				ow := overlapLen(bestPos[0], bestDim[0], pPos[0], pDim[0])
-				od := overlapLen(bestPos[2], bestDim[2], pPos[2], pDim[2])
-				if ow > epsilon && od > epsilon {
-					item.RotationType = origRT
-					item.Position = origPos
-					return false
-				}
-			}
-		}
-	}
-
-	// Stability check.
-	if e.enableStability {
-		if !stability.CheckSupport(item, bin.Items, e.supportRatio) {
-			item.RotationType = origRT
-			item.Position = origPos
-			return false
-		}
-		bin.Items = append(bin.Items, item)
-		loadOK := true
-		for _, placed := range bin.Items {
-			if placed == item {
-				continue
-			}
-			if !stability.CheckLoadBearing(placed, bin.Items) {
-				loadOK = false
-				break
-			}
-		}
-		bin.Items = bin.Items[:len(bin.Items)-1]
-		if !loadOK {
-			item.RotationType = origRT
-			item.Position = origPos
-			return false
-		}
-	}
-
-	bin.PlaceItem(item)
-	e.splitSpaces(bestPos, bestDim)
-	return true
+	item.RotationType = origRT
+	item.Position = origPos
+	return false
 }
 
-// findLowestY finds the lowest valid Y position for an item at (x, z) with given dimensions.
 func (e *MaxRectsEngine) findLowestY(bin *model.Bin, x, z float64, dim [3]float64) float64 {
 	maxY := 0.0
 	for _, placed := range bin.Items {
@@ -228,6 +179,10 @@ func (e *MaxRectsEngine) splitSpaces(pos, dim [3]float64) {
 	ix0, iy0, iz0 := pos[0], pos[1], pos[2]
 	ix1, iy1, iz1 := pos[0]+dim[0], pos[1]+dim[1], pos[2]+dim[2]
 
+	// Sub-spaces are collected apart and added after the loop: appending them
+	// to e.spaces while removing split spaces from it would let a later
+	// removal truncate the sub-spaces of an earlier split.
+	var split []freeSpace
 	n := len(e.spaces)
 	for i := 0; i < n; {
 		s := e.spaces[i]
@@ -245,59 +200,57 @@ func (e *MaxRectsEngine) splitSpaces(pos, dim [3]float64) {
 		// Remove this space and generate sub-spaces.
 		e.spaces[i] = e.spaces[n-1]
 		n--
-		e.spaces = e.spaces[:n]
 
 		if s.x < ix0-epsilon {
-			e.spaces = append(e.spaces, freeSpace{s.x, s.y, s.z, ix0 - s.x, s.h, s.d})
+			split = append(split, freeSpace{s.x, s.y, s.z, ix0 - s.x, s.h, s.d})
 		}
 		if sx1 > ix1+epsilon {
-			e.spaces = append(e.spaces, freeSpace{ix1, s.y, s.z, sx1 - ix1, s.h, s.d})
+			split = append(split, freeSpace{ix1, s.y, s.z, sx1 - ix1, s.h, s.d})
 		}
 		if s.y < iy0-epsilon {
-			e.spaces = append(e.spaces, freeSpace{s.x, s.y, s.z, s.w, iy0 - s.y, s.d})
+			split = append(split, freeSpace{s.x, s.y, s.z, s.w, iy0 - s.y, s.d})
 		}
 		if sy1 > iy1+epsilon {
-			e.spaces = append(e.spaces, freeSpace{s.x, iy1, s.z, s.w, sy1 - iy1, s.d})
+			split = append(split, freeSpace{s.x, iy1, s.z, s.w, sy1 - iy1, s.d})
 		}
 		if s.z < iz0-epsilon {
-			e.spaces = append(e.spaces, freeSpace{s.x, s.y, s.z, s.w, s.h, iz0 - s.z})
+			split = append(split, freeSpace{s.x, s.y, s.z, s.w, s.h, iz0 - s.z})
 		}
 		if sz1 > iz1+epsilon {
-			e.spaces = append(e.spaces, freeSpace{s.x, s.y, iz1, s.w, s.h, sz1 - iz1})
+			split = append(split, freeSpace{s.x, s.y, iz1, s.w, s.h, sz1 - iz1})
 		}
 	}
-
-	e.pruneContained()
+	e.spaces = append(e.spaces[:n], keepMaximal(e.spaces[:n], split)...)
 }
 
-// pruneContained removes free spaces fully contained within another.
-func (e *MaxRectsEngine) pruneContained() {
-	n := len(e.spaces)
-	for i := 0; i < n; {
+// keepMaximal returns the split spaces that are not contained in another
+// space. The unchanged spaces need no check: a split space lies inside the
+// space it came from, which contained none of them, so it cannot contain
+// one either. Of two equal split spaces, the first is kept.
+func keepMaximal(unchanged, split []freeSpace) []freeSpace {
+	kept := make([]freeSpace, 0, len(split))
+	for i, si := range split {
 		contained := false
-		si := e.spaces[i]
-		six1 := si.x + si.w
-		siy1 := si.y + si.h
-		siz1 := si.z + si.d
-
-		for j := range n {
-			if i == j {
-				continue
-			}
-			sj := e.spaces[j]
-			if sj.x <= si.x+epsilon && sj.y <= si.y+epsilon && sj.z <= si.z+epsilon &&
-				sj.x+sj.w >= six1-epsilon && sj.y+sj.h >= siy1-epsilon && sj.z+sj.d >= siz1-epsilon {
+		for _, sj := range unchanged {
+			if contains(sj, si) {
 				contained = true
 				break
 			}
 		}
-
-		if contained {
-			e.spaces[i] = e.spaces[n-1]
-			n--
-			e.spaces = e.spaces[:n]
-		} else {
-			i++
+		for j := 0; !contained && j < len(split); j++ {
+			if j != i && contains(split[j], si) && (!contains(si, split[j]) || j < i) {
+				contained = true
+			}
+		}
+		if !contained {
+			kept = append(kept, si)
 		}
 	}
+	return kept
+}
+
+// contains reports whether space a contains space b.
+func contains(a, b freeSpace) bool {
+	return a.x <= b.x+epsilon && a.y <= b.y+epsilon && a.z <= b.z+epsilon &&
+		a.x+a.w >= b.x+b.w-epsilon && a.y+a.h >= b.y+b.h-epsilon && a.z+a.d >= b.z+b.d-epsilon
 }
