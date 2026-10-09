@@ -1,7 +1,8 @@
 package placement
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/rotation"
@@ -23,8 +24,17 @@ type MaxRectsEngine struct {
 	spaces          []freeSpace
 	bin             *model.Bin
 	saved           binStates[[]freeSpace]
+	candidates      []maxRectsCandidate // reused between calls
 	enableStability bool
 	supportRatio    float64
+}
+
+// maxRectsCandidate is a spot for an item, with its score (lower is better).
+type maxRectsCandidate struct {
+	score float64
+	rt    model.RotationType
+	dim   [3]float64
+	pos   [3]float64
 }
 
 // MaxRectsOption configures the MaxRectsEngine.
@@ -122,13 +132,7 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 		}
 	}
 
-	type candidate struct {
-		score float64
-		rt    model.RotationType
-		dim   [3]float64
-		pos   [3]float64
-	}
-	var candidates []candidate
+	candidates := e.candidates[:0]
 
 	for si := range e.spaces {
 		s := &e.spaces[si]
@@ -138,9 +142,9 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				continue
 			}
 
-			// Apply gravity: find lowest valid Y at (s.x, s.z).
+			// Apply gravity: drop the item to the items under the space.
 			pos := [3]float64{s.x, s.y, s.z}
-			gravityY := e.findLowestY(bin, pos[0], pos[2], dim)
+			gravityY := e.findLowestY(bin, pos[0], pos[1], pos[2], dim)
 			if gravityY+dim[1] > bin.Height+epsilon {
 				continue
 			}
@@ -157,23 +161,30 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				shortSide = dz
 			}
 			score := pos[1]*1e10 + shortSide*1e6 + pos[2]*100 + pos[0]
-			candidates = append(candidates, candidate{score, rds[ri].rt, dim, pos})
+			candidates = append(candidates, maxRectsCandidate{score, rds[ri].rt, dim, pos})
 		}
 	}
+	e.candidates = candidates
 
-	// Stable sort keeps the space order for equal scores, as before.
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].score < candidates[j].score })
-
-	for _, c := range candidates {
-		item.RotationType = c.rt
-		item.Position = c.pos
-		// Gravity can move a spot onto other items; the full check covers it.
-		if !canPlaceDim(bin, item, c.dim, e.enableStability, e.supportRatio) {
-			continue
+	// The best spot is usually valid: try it before sorting the rest. Ties
+	// keep the space order (first minimum, stable sort).
+	if len(candidates) > 0 {
+		best := 0
+		for i := range candidates {
+			if candidates[i].score < candidates[best].score {
+				best = i
+			}
 		}
-		bin.PlaceItem(item)
-		e.splitSpaces(bin.Box(len(bin.Items) - 1))
-		return true
+		if e.tryCandidate(bin, item, candidates[best]) {
+			return true
+		}
+		candidates = append(candidates[:best], candidates[best+1:]...)
+		slices.SortStableFunc(candidates, func(a, b maxRectsCandidate) int { return cmp.Compare(a.score, b.score) })
+		for _, c := range candidates {
+			if e.tryCandidate(bin, item, c) {
+				return true
+			}
+		}
 	}
 
 	item.RotationType = origRT
@@ -181,13 +192,27 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	return false
 }
 
-func (e *MaxRectsEngine) findLowestY(bin *model.Bin, x, z float64, dim [3]float64) float64 {
+// tryCandidate places the item at c if the full placement check passes.
+func (e *MaxRectsEngine) tryCandidate(bin *model.Bin, item *model.Item, c maxRectsCandidate) bool {
+	item.RotationType = c.rt
+	item.Position = c.pos
+	if !canPlaceDim(bin, item, c.dim, e.enableStability, e.supportRatio) {
+		return false
+	}
+	bin.PlaceItem(item)
+	e.splitSpaces(bin.Box(len(bin.Items) - 1))
+	return true
+}
+
+func (e *MaxRectsEngine) findLowestY(bin *model.Bin, x, y, z float64, dim [3]float64) float64 {
+	// The highest top among the items under the footprint that are not
+	// above the space: items above it must not lift the item onto them.
 	maxY := 0.0
 	for k := range bin.Items {
 		lo, hi := bin.Box(k)
-		// Check XZ overlap.
 		if x < hi[0]-epsilon && lo[0] < x+dim[0]-epsilon &&
-			z < hi[2]-epsilon && lo[2] < z+dim[2]-epsilon && hi[1] > maxY {
+			z < hi[2]-epsilon && lo[2] < z+dim[2]-epsilon &&
+			hi[1] <= y+epsilon && hi[1] > maxY {
 			maxY = hi[1]
 		}
 	}
