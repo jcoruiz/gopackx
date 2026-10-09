@@ -161,3 +161,16 @@ func itemAt(x, y, z, w, h, d, weight float64) *model.Item {
 	item.Position = [3]float64{x, y, z}
 	return item
 }
+
+// Two items thinner than the tolerance on the same level must not rest on
+// each other: LoadOnTop used to recurse between them forever.
+func TestLoadOnTopThinItemsOnTheSameLevel(t *testing.T) {
+	a := model.NewItem("a", 1, 0.0000005, 1, 1)
+	b := model.NewItem("b", 1, 0.0000005, 1, 1)
+	a.Position = [3]float64{0, 1, 0}
+	b.Position = [3]float64{0, 1, 0}
+	placed := []*model.Item{a, b}
+	if got := LoadOnTop(a, placed); got != 0 {
+		t.Errorf("LoadOnTop(a) = %v, want 0", got)
+	}
+}

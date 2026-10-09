@@ -3,6 +3,7 @@ package model
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func at(it *Item, x, y, z float64) *Item {
@@ -115,4 +116,37 @@ func TestLateLoadTrackingMatchesTrackingFromTheStart(t *testing.T) {
 	if !near(late.Load(0), 0.6*(8+3+2)) {
 		t.Errorf("Load(x) = %v, want 60%% of the 13 kg above", late.Load(0))
 	}
+}
+
+// done fails the test if f does not return within a second.
+func done(t *testing.T, f func()) {
+	t.Helper()
+	finished := make(chan struct{})
+	go func() {
+		f()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("did not return")
+	}
+}
+
+// An item thinner than the position tolerance touched itself as a support,
+// and passing load down looped forever.
+func TestThinItemsDoNotLoop(t *testing.T) {
+	done(t, func() {
+		b := NewBin("b", 2, 2, 2, 0)
+		b.PlaceItem(at(NewItem("base", 1, 1, 1, 1, ItemLoadBear(100)), 0, 0, 0))
+		b.PlaceItem(at(NewItem("sheet", 1, 0.0000005, 1, 1), 0, 1, 0))
+		if !near(b.Load(0), 1) {
+			t.Errorf("Load(base) = %v, want 1", b.Load(0))
+		}
+		// A second sheet on the same level must not count as resting on the first.
+		b.PlaceItem(at(NewItem("sheet2", 1, 0.0000005, 1, 1), 0, 1, 0))
+		if !near(b.Load(1), 0) {
+			t.Errorf("Load(sheet) = %v, want 0", b.Load(1))
+		}
+	})
 }

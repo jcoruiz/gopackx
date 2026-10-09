@@ -386,7 +386,7 @@ func (b *Bin) SlideToOrigin(pos, dim [3]float64) [3]float64 {
 func (b *Bin) RestsOnFragile(pos, dim [3]float64) int {
 	for _, f := range b.fragile {
 		o := b.boxes[6*f : 6*f+6]
-		if math.Abs(o[4]-pos[1]) <= spaceTolerance && footprint(pos, dim, o) > spaceTolerance {
+		if restsOn(pos[1], o[1], o[4]) && footprint(pos, dim, o) > spaceTolerance {
 			return f
 		}
 	}
@@ -398,7 +398,7 @@ func (b *Bin) RestsOnFragile(pos, dim [3]float64) int {
 func (b *Bin) HasItemOnTop(pos, dim [3]float64) bool {
 	top := pos[1] + dim[1]
 	for o := b.boxes; len(o) >= 6; o = o[6:] {
-		if math.Abs(o[1]-top) <= spaceTolerance && footprint(pos, dim, o) > spaceTolerance {
+		if restsOn(o[1], pos[1], top) && footprint(pos, dim, o) > spaceTolerance {
 			return true
 		}
 	}
@@ -453,7 +453,7 @@ func overlap1D(a0, a1, b0, b1 float64) float64 {
 func (b *Bin) loadAbove(lo, hi [3]float64) (onTop float64, moved []loadAdd) {
 	o := b.boxes
 	for i := 0; i < len(o); i += 6 {
-		if math.Abs(o[i+1]-hi[1]) > spaceTolerance {
+		if !restsOn(o[i+1], lo[1], hi[1]) {
 			continue
 		}
 		touch := overlap1D(lo[0], hi[0], o[i], o[i+3]) * overlap1D(lo[2], hi[2], o[i+2], o[i+5])
@@ -484,7 +484,7 @@ func (b *Bin) supports(dst []loadAdd, lo, hi [3]float64) []loadAdd {
 	}
 	o := b.boxes
 	for i := 0; i < len(o); i += 6 {
-		if math.Abs(o[i+4]-lo[1]) > spaceTolerance {
+		if !restsOn(lo[1], o[i+1], o[i+4]) {
 			continue
 		}
 		touch := overlap1D(lo[0], hi[0], o[i], o[i+3]) * overlap1D(lo[2], hi[2], o[i+2], o[i+5])
@@ -493,6 +493,15 @@ func (b *Bin) supports(dst []loadAdd, lo, hi [3]float64) []loadAdd {
 		}
 	}
 	return dst
+}
+
+// restsOn reports whether something whose bottom is at bottom rests on a box
+// spanning underBottom to underTop: the bottom touches the box's top face
+// and is strictly above the box's own bottom. The second condition keeps a
+// box thinner than the tolerance from supporting itself or an item on the
+// same level, so load always flows strictly down.
+func restsOn(bottom, underBottom, underTop float64) bool {
+	return math.Abs(bottom-underTop) <= spaceTolerance && bottom > underBottom
 }
 
 // shareDown appends to dst the load w, carried by a box spanning lo to hi,

@@ -266,3 +266,31 @@ func TestBinsRecordTheirType(t *testing.T) {
 		})
 	}
 }
+
+// Items thinner than the position tolerance are valid input and must not
+// hang any entry point (load propagation used to loop on them).
+func TestEntryPointsHandleThinItems(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{model.NewBin("b", 2, 2, 2, 0)}
+			items := []*model.Item{
+				model.NewItem("base", 1, 1, 1, 1, model.ItemLoadBear(100)),
+				model.NewItem("sheet", 1, 0.0000005, 1, 1),
+				model.NewItem("sheet2", 1, 0.0000005, 1, 1, model.ItemLoadBear(0.5)),
+			}
+			finished := make(chan error, 1)
+			go func() {
+				_, err := ep.run(context.Background(), bins, items)
+				finished <- err
+			}()
+			select {
+			case err := <-finished:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("did not return")
+			}
+		})
+	}
+}

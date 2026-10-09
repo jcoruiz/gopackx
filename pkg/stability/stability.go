@@ -126,10 +126,12 @@ func LoadOnTop(item *model.Item, placed []*model.Item) float64 {
 }
 
 // contact returns the area of the base of above that rests on the top face
-// of under.
+// of under. above must start strictly higher than under, so that items
+// thinner than the tolerance cannot rest on each other in a cycle.
 func contact(above, under *model.Item) float64 {
 	ad, ud := above.Dimension(), under.Dimension()
-	if math.Abs(above.Position[model.HeightAxis]-(under.Position[model.HeightAxis]+ud[model.HeightAxis])) > epsilon {
+	if math.Abs(above.Position[model.HeightAxis]-(under.Position[model.HeightAxis]+ud[model.HeightAxis])) > epsilon ||
+		above.Position[model.HeightAxis] <= under.Position[model.HeightAxis] {
 		return 0
 	}
 	return overlapLength(above.Position[model.WidthAxis], ad[model.WidthAxis], under.Position[model.WidthAxis], ud[model.WidthAxis]) *
