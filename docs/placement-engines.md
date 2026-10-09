@@ -1,6 +1,6 @@
 # Placement Engines
 
-A placement engine determines **where** inside a bin each item is physically positioned. GoPackX provides three engines, each implementing the `placement.Engine` interface:
+A placement engine determines **where** inside a bin each item is physically positioned. GoPackX provides four engines (Pivot Points, Extreme Points, MaxRects and LAFF, which has a fast variant), each implementing the `placement.Engine` interface:
 
 ```go
 type Engine interface {
@@ -55,7 +55,7 @@ After a valid placement is found, **fix-point correction** pushes the item towar
 
 ### Characteristics
 
-- **Speed**: ~1.5ms for 50 items (1991 allocs, 192KB)
+- **Speed**: ~0.1ms for 50 items (336 allocs, 33KB)
 - **Quality**: Good -- fix-point correction produces reasonably tight packing
 - **Scaling**: O(n^2) placement checks (each new item checks against all placed items)
 - **State**: Stateless -- generates pivots fresh for each placement call
@@ -97,7 +97,7 @@ The Extreme Points engine maintains a dynamic list of candidate positions, each 
      - Support penalty: `(3 - support_count) * 1e6` (strongly prefers supported positions)
      - Position score: `Y * 1e4 + Z * 1e2 + X` (prefers lower, closer to front, closer to left)
      - Waste score: sum of unused space in each dimension (prefers tighter fit)
-3. The best-scoring valid placement is selected
+3. The best-scoring valid placement is selected (points are scored first, and the full placement check only runs for points that could beat the best one so far)
 4. **Fix-point correction** applied (same as Pivot engine)
 5. After placement, the point list is updated:
    - Points inside the newly placed item are removed
@@ -121,10 +121,10 @@ The Extreme Points engine maintains a dynamic list of candidate positions, each 
 
 ### Characteristics
 
-- **Speed**: ~17ms for 50 items (1827 allocs, 304KB)
+- **Speed**: ~1.4ms for 50 items (1901 allocs, 386KB)
 - **Quality**: Best -- intersection points and scoring produce the densest packing
-- **Scaling**: O(n^2) point maintenance (each placement updates all points against all items)
-- **State**: Stateful -- maintains point list per bin (reinitializes when bin changes)
+- **Scaling**: O(n^2) point maintenance (each placement updates all points against all items). With TrialPacking, 800 items take about 2 s on an Apple M4 Pro (9 minutes before v0.3.0, which rebuilt the points every time the solver switched bins)
+- **State**: Stateful -- keeps the point list of every bin it packs (see [Engine State](#engine-state))
 - **Best for**: When packing quality is the top priority and you have <100 items
 
 ### Example
@@ -149,10 +149,10 @@ placement.NewLAFFEngine(placement.WithLAFFStability(0.7))
 
 ### Algorithm
 
-The LAFF engine divides the bin into horizontal **levels** (shelves). Each level has a Y position and a height defined by the first item placed on it.
+The LAFF engine divides the bin into horizontal **levels** (shelves). There is one level per height at which items start, as tall as the tallest item starting there, so the levels follow from what the bin holds.
 
 1. **First item**: creates a new level at Y=0. The level height equals the item's effective height in the chosen rotation. The rotation maximizing base area (width * depth) is preferred.
-2. **Subsequent items**: try existing levels (most recent first), then create a new level if no existing level works
+2. **Subsequent items**: try existing levels (highest first), then create a new level on top of everything placed so far if no existing level works
 3. **Within a level**:
    - Candidate positions are generated from corners of items already on the level
    - 2D candidates: `(x + width, level_y, z)` and `(x, level_y, z + depth)` for each item on the level
@@ -179,12 +179,12 @@ The LAFF engine divides the bin into horizontal **levels** (shelves). Each level
 
 | Variant | Speed | Allocs | Memory |
 |---|---|---|---|
-| LAFF-Fast | ~0.25ms | 377 | 115KB |
-| LAFF (full) | ~0.38ms | 400 | 170KB |
+| LAFF-Fast | ~0.08ms | 390 | 128KB |
+| LAFF (full) | ~0.08ms | 423 | 186KB |
 
 - **Quality**: Good for uniform or shelf-like items. Less optimal for highly mixed sizes (level height is wasted when items are much shorter than the first item on the level).
 - **Scaling**: O(n * levels) per item -- scales well to thousands of items
-- **State**: Stateful -- tracks levels per bin (reinitializes when bin changes)
+- **State**: Stateful -- keeps the levels of every bin it packs (see [Engine State](#engine-state))
 - **Best for**: High-throughput scenarios (batch processing, real-time systems) and uniform item sets
 
 ### Example
@@ -198,9 +198,38 @@ p := packer.NewPacker(
 )
 ```
 
+## MaxRects Engine
+
+```go
+placement.NewMaxRectsEngine()
+placement.NewMaxRectsEngine(placement.WithMaxRectsStability(0.7))
+```
+
+### Algorithm
+
+The MaxRects engine keeps the list of **maximal free spaces** of the bin: the largest empty boxes that fit between the placed items and the walls.
+
+1. **Candidates**: for each free space and each allowed rotation that fits in it, the item is placed at the space's corner and dropped onto the items under the space (gravity)
+2. **Scoring** (lower is better): `Y * 1e10 + shortSide * 1e6 + Z * 100 + X` -- lowest position first, then the tightest fit (Best Short Side Fit)
+3. **Validation**: spots are tried from the best score down until one passes the full placement check
+4. **Update**: every free space the item overlaps is split into up to six sub-spaces around it, and sub-spaces contained in another space are dropped
+
+### Configuration
+
+| Option | Description |
+|---|---|
+| `WithMaxRectsStability(ratio)` | Enable stability checking with the given support ratio threshold. |
+
+### Characteristics
+
+- **Speed**: ~4ms for 50 items (675 allocs, 286KB)
+- **Quality**: Close to Extreme Points. Before v0.3.0 the engine lost most of its free spaces when an item split several of them, and used 20% more boxes
+- **State**: Stateful -- keeps the free spaces of every bin it packs (see [Engine State](#engine-state))
+- **Best for**: Mixed item sizes where filling gaps matters
+
 ## Common Features
 
-All three engines share these behaviors:
+All engines share these behaviors:
 
 ### Fix-Point Correction
 
@@ -231,44 +260,52 @@ Items on the floor always have a support ratio of 1.0.
 
 ### Fragile Item Handling
 
-If a fragile item is already placed, no new item can be placed on top of it. This is checked via XZ-plane overlap at the fragile item's top Y position.
+Nothing may rest on a fragile item: a new item cannot be placed on top of one, and a fragile item cannot be slid under an item placed earlier.
 
 ### Load-Bearing Capacity
 
-When stability is enabled, placing a new item checks that it does not overload any item below. Weight from above is distributed proportionally based on overlap area.
+Load limits are always enforced, with or without stability, and count the full weight stacked on an item. Placing an item checks its own limit (for items it would be slid under) and the limits of every item under it. See [Physical Constraints](constraints.md#load-bearing-capacity).
 
 ### Weight Limits
 
-Before placing an item, the engine verifies that `bin.RemainingWeight() >= item.Weight`.
+Before placing an item, the engine verifies that `bin.CanCarry(item.Weight)`. A `MaxWeight` of 0 means no limit.
 
 ### Rotation
 
 All engines try every allowed rotation for each candidate position. Default: all 6 rotations. Restricted via `ItemUpright()` or `ItemAllowedRotations()`.
 
+### Engine State
+
+Extreme Points, MaxRects and LAFF keep per-bin state (points, free spaces, levels) for every bin they pack, so a solver can switch between open bins without rebuilding it. A bin an engine has not packed itself is rebuilt from its items exactly as if the engine had placed them, so one engine switching between bins gives the same result as one engine per bin.
+
+Engines are not safe for concurrent use: give each goroutine its own (solvers take engine factories for this). To reuse an engine for an unrelated packing run, call `Reset()`; `packer.Packer` does it on every `Pack`.
+
 ## Comparison Table
 
-| Feature | Pivot | Extreme Points | LAFF / LAFF-Fast |
-|---|---|---|---|
-| **Speed (50 items)** | ~1.5ms | ~17ms | ~0.38ms / ~0.25ms |
-| **Memory** | 192KB | 304KB | 170KB / 115KB |
-| **Allocations** | 1991 | 1827 | 400 / 377 |
-| **Packing quality** | Good | Best | Good (uniform items) |
-| **Candidate generation** | 3 corners per item | Corners + intersections | Level-based corners |
-| **Quick rejection** | No | Yes (MaxSpace) | No |
-| **Gravity projection** | No | Yes | No |
-| **Scoring** | First valid | Multi-criteria best | First valid |
-| **State** | Stateless | Stateful (per bin) | Stateful (per bin) |
-| **Scaling** | O(n^2) | O(n^2) | O(n * levels) |
-| **Best for** | General purpose | Quality-critical | High throughput |
+Times from the `BenchmarkPack50Items_*` benchmarks in `pkg/packer` on an AMD Ryzen 9 9950X3D (see [Performance](performance.md)).
+
+| Feature | Pivot | Extreme Points | MaxRects | LAFF / LAFF-Fast |
+|---|---|---|---|---|
+| **Speed (50 items)** | ~0.1ms | ~1.4ms | ~4ms | ~0.08ms / ~0.08ms |
+| **Memory** | 33KB | 386KB | 286KB | 186KB / 128KB |
+| **Allocations** | 336 | 1901 | 675 | 423 / 390 |
+| **Packing quality** | Good | Best | Close to best | Good (uniform items) |
+| **Candidate generation** | 3 corners per item | Corners + intersections | Corners of free spaces | Level-based corners |
+| **Quick rejection** | Recent blockers | MaxSpace, score first | Space size | Recent blockers |
+| **Gravity projection** | Fix-point | Yes | Yes | Fix-point |
+| **Scoring** | First valid | Multi-criteria best | Best short side fit | First valid |
+| **State** | Stateless | Per bin | Per bin | Per bin |
+| **Scaling** | O(n^2) | O(n^2) | O(n * spaces) | O(n * levels) |
+| **Best for** | General purpose | Quality-critical | Mixed sizes | High throughput |
 
 ## Decision Guide
 
 ```
 Is throughput the primary concern?
-  YES -> LAFF-Fast (~0.25ms, 4x faster than Pivot)
+  YES -> LAFF or LAFF-Fast (~0.08ms for 50 items)
   NO  -> Is packing quality critical?
-           YES -> ExtremePoints (best utilization, ~17ms)
-           NO  -> Pivot (good balance, ~1.5ms) -- the default
+           YES -> ExtremePoints (best utilization, ~1.4ms) or MaxRects
+           NO  -> Pivot (good balance, ~0.1ms) -- the default
 ```
 
 If you are unsure, use the [Parallel solver](solvers.md) to try all engines concurrently and automatically pick the best result.

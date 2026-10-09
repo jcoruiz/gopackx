@@ -19,12 +19,17 @@
 //
 // # Load Bearing
 //
-// [WeightAbove] calculates the total weight resting directly on top of an item,
-// proportional to the overlap area between the item and items above it.
+// [LoadOnTop] calculates the full weight resting on an item: every item on top
+// of it passes on its own weight plus the load on it, split among the items
+// under it in proportion to the contact area with each. Placement engines
+// check this load against LoadBear.
 //
-// [CheckLoadBearing] returns true if the weight above does not exceed the item's
-// load-bearing capacity. Items with zero LoadBear and non-fragile status have
-// no limit enforced. Fragile items must have zero weight above them.
+// [WeightAbove] only counts the items resting directly on an item, each by the
+// share of its base that touches it.
+//
+// [CheckLoadBearing] returns true if the load on top (LoadOnTop) does not
+// exceed the item's load-bearing capacity, and if nothing rests on a fragile
+// item. Items with zero LoadBear and non-fragile status have no limit.
 //
 // # Gravity Center
 //

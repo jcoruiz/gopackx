@@ -60,9 +60,21 @@
 //     the origin along each axis to close gaps.
 //   - Stability checking: optional minimum support ratio threshold. When enabled,
 //     an item's base area must be sufficiently supported by items below or the floor.
-//   - Fragile items: items marked as fragile will never have other items placed
-//     on top of them.
-//   - Weight limits: the bin's maximum weight capacity is enforced during placement.
-//   - Load-bearing limits: when stability is enabled, placing an item must not
-//     exceed the load-bearing capacity of items below it.
+//   - Fragile items: items marked as fragile never have other items resting on
+//     them, whether the other item is placed later on top or the fragile item is
+//     slid under an item placed earlier.
+//   - Weight limits: the bin's maximum weight capacity is enforced during
+//     placement (a MaxWeight of 0 means no limit).
+//   - Load limits: an item's LoadBear caps the full weight stacked on it, always
+//     (with or without stability). Placing an item checks its own limit and those
+//     of every item under it; see [model.Bin.FitsLoadLimits].
+//
+// # Engine State
+//
+// Extreme Points, MaxRects and LAFF keep per-bin state (points, free spaces,
+// levels) for every bin they pack, so solvers can switch between open bins
+// cheaply; the result is the same as with one engine per bin. Engines are not
+// safe for concurrent use: give each goroutine its own (solvers take engine
+// factories for this). Call Reset before reusing an engine for an unrelated
+// packing run; packer.Packer does it on every Pack.
 package placement

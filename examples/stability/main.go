@@ -80,7 +80,7 @@ func demoSupportRatio() {
 
 func demoLoadBearing() {
 	fmt.Println("--- 2. Load-Bearing Validation ---")
-	fmt.Println("Checks if the weight on top of an item exceeds its capacity.")
+	fmt.Println("Checks if the weight stacked on an item (the whole stack) exceeds its capacity.")
 	fmt.Println()
 
 	// A sturdy box with 50 kg load-bearing capacity.
@@ -103,9 +103,9 @@ func demoLoadBearing() {
 
 	allPlaced := []*model.Item{sturdy, weak, heavy}
 
-	// Check weight above each item.
+	// Check the load on each item: everything stacked on it.
 	for _, item := range []*model.Item{sturdy, weak} {
-		weightAbove := stability.WeightAbove(item, allPlaced)
+		weightAbove := stability.LoadOnTop(item, allPlaced)
 		ok := stability.CheckLoadBearing(item, allPlaced)
 		fmt.Printf("  %-12s  capacity: %5.1f kg  weight above: %5.1f kg  ok: %v\n",
 			item.ID, item.LoadBear, weightAbove, ok)
@@ -124,7 +124,7 @@ func demoLoadBearing() {
 
 	fragileItems := []*model.Item{fragile, lightOnTop}
 	fragileOk := stability.CheckLoadBearing(fragile, fragileItems)
-	fragileWeight := stability.WeightAbove(fragile, fragileItems)
+	fragileWeight := stability.LoadOnTop(fragile, fragileItems)
 	fmt.Printf("  %-12s  fragile=true       weight above: %5.1f kg  ok: %v\n",
 		fragile.ID, fragileWeight, fragileOk)
 	fmt.Println()

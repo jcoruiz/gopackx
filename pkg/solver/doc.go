@@ -71,9 +71,8 @@
 //
 //	bb := solver.NewBranchBound(engineFactory, solver.BBFull())
 //
-// Both variants respect context deadlines and cancellation, returning the best
-// solution found so far when the context expires. A greedy seed solution is
-// computed first, so there is always a valid result.
+// Both variants respect context deadlines and cancellation. A greedy seed
+// solution is computed first, so there is always a valid result.
 //
 // # Parallel
 //
@@ -100,4 +99,19 @@
 //
 // The best result is selected by comparing the number of fitted items first,
 // then average volume utilization as a tiebreaker.
+//
+// # Context, errors and determinism
+//
+// Every Solve respects context deadlines and cancellation. If the context
+// ends before the solver finishes, it returns the best result found so far
+// together with the context error; every item is in the result, placed or
+// unfitted. Deadlines also work under GOOS=js (WebAssembly), where the timer
+// behind context.WithTimeout cannot fire while a solver computes.
+//
+// Invalid input (see [model.Validate]) returns a nil result and an error that
+// wraps [model.ErrInvalidInput].
+//
+// All solvers are deterministic: the same input gives the same result. The
+// Metaheuristic draws its random choices from a generator seeded with
+// [MetaRandomSeed] (default 1); use other seeds to explore other solutions.
 package solver
