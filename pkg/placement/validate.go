@@ -65,45 +65,7 @@ func canPlaceDimBlocker(bin *model.Bin, item *model.Item, dim [3]float64, enable
 // fixPointDim moves an item toward the origin, height axis first, until it
 // rests against the items or walls it overlaps with seen along that axis.
 func fixPointDim(bin *model.Bin, item *model.Item, dim [3]float64) {
-	if len(bin.Items) == 0 {
-		item.Position = [3]float64{0, 0, 0}
-		return
-	}
-
-	for _, axis := range [3]int{int(model.HeightAxis), int(model.WidthAxis), int(model.DepthAxis)} {
-		maxPos := 0.0
-		a1, a2 := otherAxes(axis)
-
-		for k := range bin.Items {
-			lo, hi := bin.Box(k)
-			if !overlaps1D(item.Position[a1], dim[a1], lo[a1], hi[a1]-lo[a1]) ||
-				!overlaps1D(item.Position[a2], dim[a2], lo[a2], hi[a2]-lo[a2]) {
-				continue
-			}
-
-			farEdge := hi[axis]
-			if farEdge <= item.Position[axis]+epsilon && farEdge > maxPos {
-				maxPos = farEdge
-			}
-		}
-
-		item.Position[axis] = maxPos
-	}
-}
-
-func otherAxes(axis int) (int, int) {
-	switch axis {
-	case 0:
-		return 1, 2
-	case 1:
-		return 0, 2
-	default:
-		return 0, 1
-	}
-}
-
-func overlaps1D(pos1, len1, pos2, len2 float64) bool {
-	return pos1 < pos2+len2-epsilon && pos2 < pos1+len1-epsilon
+	item.Position = bin.SlideToOrigin(item.Position, dim)
 }
 
 func overlapLen(pos1, len1, pos2, len2 float64) float64 {

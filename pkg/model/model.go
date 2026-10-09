@@ -346,15 +346,39 @@ func (b *Bin) Box(i int) (lo, hi [3]float64) {
 // with size dim, or -1 if none does. Touching faces do not overlap.
 func (b *Bin) Collides(pos, dim [3]float64) int {
 	x1, y1, z1 := pos[0]+dim[0], pos[1]+dim[1], pos[2]+dim[2]
-	o := b.boxes
-	for i := 0; i < len(o); i += 6 {
-		if pos[0] < o[i+3]-spaceTolerance && o[i] < x1-spaceTolerance &&
-			pos[1] < o[i+4]-spaceTolerance && o[i+1] < y1-spaceTolerance &&
-			pos[2] < o[i+5]-spaceTolerance && o[i+2] < z1-spaceTolerance {
-			return i / 6
+	// Reslicing six at a time lets the compiler drop bounds checks.
+	for k, o := 0, b.boxes; len(o) >= 6; k, o = k+1, o[6:] {
+		if pos[0] < o[3]-spaceTolerance && o[0] < x1-spaceTolerance &&
+			pos[1] < o[4]-spaceTolerance && o[1] < y1-spaceTolerance &&
+			pos[2] < o[5]-spaceTolerance && o[2] < z1-spaceTolerance {
+			return k
 		}
 	}
 	return -1
+}
+
+// SlideToOrigin returns where a box at pos with size dim ends up when pushed
+// toward the origin, height axis first, then width, then depth: on each axis
+// it stops at the far face of the closest item it would run into, or at the
+// wall.
+func (b *Bin) SlideToOrigin(pos, dim [3]float64) [3]float64 {
+	for _, axis := range [3]int{1, 0, 2} {
+		a1, a2 := (axis+1)%3, (axis+2)%3
+		lo1, hi1 := pos[a1], pos[a1]+dim[a1]
+		lo2, hi2 := pos[a2], pos[a2]+dim[a2]
+		stop := 0.0
+		for o := b.boxes; len(o) >= 6; o = o[6:] {
+			box := (*[6]float64)(o)
+			if lo1 < box[3+a1]-spaceTolerance && box[a1] < hi1-spaceTolerance &&
+				lo2 < box[3+a2]-spaceTolerance && box[a2] < hi2-spaceTolerance {
+				if far := box[3+axis]; far <= pos[axis]+spaceTolerance && far > stop {
+					stop = far
+				}
+			}
+		}
+		pos[axis] = stop
+	}
+	return pos
 }
 
 // RestsOnFragile returns the index of a fragile item that a box placed at
@@ -373,9 +397,8 @@ func (b *Bin) RestsOnFragile(pos, dim [3]float64) int {
 // placed at pos with size dim.
 func (b *Bin) HasItemOnTop(pos, dim [3]float64) bool {
 	top := pos[1] + dim[1]
-	o := b.boxes
-	for i := 0; i < len(o); i += 6 {
-		if math.Abs(o[i+1]-top) <= spaceTolerance && footprint(pos, dim, o[i:i+6]) > spaceTolerance {
+	for o := b.boxes; len(o) >= 6; o = o[6:] {
+		if math.Abs(o[1]-top) <= spaceTolerance && footprint(pos, dim, o) > spaceTolerance {
 			return true
 		}
 	}
