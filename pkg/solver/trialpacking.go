@@ -116,6 +116,7 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		// Open a new bin of the selected type.
 		newBin := cloneBinEmpty(bins[best.binTypeIdx])
 		newBin.ID = binInstanceID(bins[best.binTypeIdx].ID, len(openBins))
+		newBin.TypeID = bins[best.binTypeIdx].ID
 
 		// Place the current item in the new bin.
 		if !engine.PlaceItem(newBin, item) {

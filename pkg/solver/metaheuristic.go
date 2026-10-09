@@ -225,6 +225,7 @@ func (m *Metaheuristic) materialize(sol *solution, items []*model.Item, binTypes
 		packed, ok := repackBin(m.newEngine, bt, binItems)
 		if ok {
 			packed.ID = bt.ID + "-" + strconv.Itoa(len(resultBins))
+			packed.TypeID = bt.ID
 			resultBins = append(resultBins, packed)
 		} else {
 			// Shouldn't happen if revalidation passed, but handle gracefully.

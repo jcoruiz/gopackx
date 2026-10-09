@@ -107,8 +107,8 @@ func TestRemoveLastItem(t *testing.T) {
 	if bin.TotalWeight() != 13 {
 		t.Errorf("TotalWeight = %f, want 13", bin.TotalWeight())
 	}
-	if !bin.HasFragile {
-		t.Error("expected HasFragile = true")
+	if len(bin.fragile) != 1 {
+		t.Error("expected one fragile item tracked")
 	}
 
 	removed := bin.RemoveLastItem()
@@ -124,11 +124,11 @@ func TestRemoveLastItem(t *testing.T) {
 	if bin.TotalWeight() != 5 {
 		t.Errorf("TotalWeight = %f, want 5", bin.TotalWeight())
 	}
-	if bin.HasFragile {
-		t.Error("HasFragile should be false after removing only fragile item")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked after removing the only one")
 	}
-	if len(bin.AABBData) != 6 {
-		t.Errorf("AABBData len = %d, want 6", len(bin.AABBData))
+	if len(bin.boxes) != 6 {
+		t.Errorf("boxes len = %d, want 6", len(bin.boxes))
 	}
 
 	// Remove last remaining item.
@@ -162,24 +162,24 @@ func TestPlaceItemFragileTracking(t *testing.T) {
 	f2 := NewItem("f2", 10, 10, 10, 1, ItemFragile())
 
 	bin.PlaceItem(normal)
-	if bin.HasFragile {
-		t.Error("HasFragile should be false with no fragile items")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked yet")
 	}
 
 	bin.PlaceItem(f1)
 	bin.PlaceItem(f2)
-	if len(bin.FragileIdxs) != 2 {
-		t.Errorf("FragileIdxs = %v, want 2 entries", bin.FragileIdxs)
+	if len(bin.fragile) != 2 {
+		t.Errorf("fragile = %v, want 2 entries", bin.fragile)
 	}
 
 	bin.RemoveLastItem() // remove f2
-	if len(bin.FragileIdxs) != 1 {
-		t.Errorf("FragileIdxs = %v, want 1 entry after removing f2", bin.FragileIdxs)
+	if len(bin.fragile) != 1 {
+		t.Errorf("fragile = %v, want 1 entry after removing f2", bin.fragile)
 	}
 
 	bin.RemoveLastItem() // remove f1
-	if bin.HasFragile {
-		t.Error("HasFragile should be false after removing all fragile items")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked after removing all of them")
 	}
 }
 
@@ -243,7 +243,7 @@ func TestBinCloneAndCloneEmpty(t *testing.T) {
 	if len(c.Items) != 1 || c.Items[0] == it || c.Items[0].ID != "glass" {
 		t.Fatal("Clone should hold a copy of the placed item")
 	}
-	if c.TotalWeight() != 1 || !c.HasFragile {
+	if c.TotalWeight() != 1 || len(c.fragile) != 1 {
 		t.Error("Clone lost the tracked weight or fragile index")
 	}
 	c.RemoveLastItem()

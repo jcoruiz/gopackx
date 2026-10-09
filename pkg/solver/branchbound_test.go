@@ -268,14 +268,15 @@ func TestCloneSnapshotBin(t *testing.T) {
 	if snap.Items[0].ID != "a" || snap.Items[1].ID != "b" {
 		t.Error("snapshot items should preserve IDs")
 	}
-	if snap.ItemWeight != bin.ItemWeight {
-		t.Errorf("snapshot ItemWeight = %f, want %f", snap.ItemWeight, bin.ItemWeight)
+	if snap.TotalWeight() != bin.TotalWeight() {
+		t.Errorf("snapshot TotalWeight = %f, want %f", snap.TotalWeight(), bin.TotalWeight())
 	}
-	if len(snap.AABBData) != len(bin.AABBData) {
-		t.Errorf("snapshot AABBData len = %d, want %d", len(snap.AABBData), len(bin.AABBData))
-	}
-	if len(snap.FragileIdxs) != len(bin.FragileIdxs) {
-		t.Errorf("snapshot FragileIdxs = %v, want %v", snap.FragileIdxs, bin.FragileIdxs)
+	for i := range bin.Items {
+		slo, shi := snap.Box(i)
+		blo, bhi := bin.Box(i)
+		if slo != blo || shi != bhi {
+			t.Errorf("snapshot box %d = %v-%v, want %v-%v", i, slo, shi, blo, bhi)
+		}
 	}
 
 	// Mutating snapshot should not affect original.

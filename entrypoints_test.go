@@ -240,3 +240,29 @@ func TestEntryPointsTreatZeroMaxWeightAsNoLimit(t *testing.T) {
 		})
 	}
 }
+
+// Bins opened from a box type say which one through TypeID. Two types of
+// the same size used to be told apart by size only, so the metaheuristic
+// could report the expensive one: here the cheap box costs 1 and the
+// expensive one 10.
+func TestBinsRecordTheirType(t *testing.T) {
+	for _, ep := range entryPoints[:4] { // the catalog solvers
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{
+				model.NewBin("expensive", 30, 30, 30, 100, model.BinCost(10)),
+				model.NewBin("cheap", 30, 30, 30, 100, model.BinCost(1)),
+			}
+			items := []*model.Item{model.NewItem("a", 10, 10, 10, 1), model.NewItem("b", 10, 10, 10, 1)}
+			res, err := ep.run(context.Background(), bins, items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Bins) != 1 {
+				t.Fatalf("used %d bins, want 1", len(res.Bins))
+			}
+			if got := res.Bins[0]; got.TypeID != "cheap" || got.Cost != 1 || res.Stats.TotalCost != 1 {
+				t.Errorf("bin %s has TypeID %q and cost %v (total %v), want the cheap type", got.ID, got.TypeID, got.Cost, res.Stats.TotalCost)
+			}
+		})
+	}
+}

@@ -97,11 +97,24 @@ func extractSolution(result *model.Result, items []*model.Item, binTypes []*mode
 	return sol
 }
 
-// matchBinType finds which bin type matches the given bin by dimensions.
+// matchBinType finds the bin type a bin was opened from: the type named by
+// its TypeID if it has the same specification, otherwise the first type
+// with the same specification. Matching on size alone would mix up types
+// that differ only in cost.
 func matchBinType(bin *model.Bin, binTypes []*model.Bin) int {
+	same := func(bt *model.Bin) bool {
+		return bt.Width == bin.Width && bt.Height == bin.Height && bt.Depth == bin.Depth &&
+			bt.MaxWeight == bin.MaxWeight && bt.Cost == bin.Cost
+	}
+	if bin.TypeID != "" {
+		for i, bt := range binTypes {
+			if bt.ID == bin.TypeID && same(bt) {
+				return i
+			}
+		}
+	}
 	for i, bt := range binTypes {
-		if bt.Width == bin.Width && bt.Height == bin.Height &&
-			bt.Depth == bin.Depth && bt.MaxWeight == bin.MaxWeight {
+		if same(bt) {
 			return i
 		}
 	}

@@ -109,9 +109,15 @@ func (e *LAFFEngine) switchBin(bin *model.Bin) {
 func (e *LAFFEngine) initBin(bin *model.Bin) {
 	e.bin = bin
 	e.levels = nil
-	for _, item := range bin.Items {
-		e.addLevel(item.Position[model.HeightAxis], item.PlacedDim[model.HeightAxis])
+	for k := range bin.Items {
+		e.addPlaced(bin, k)
 	}
+}
+
+// addPlaced records the level of item k of the bin.
+func (e *LAFFEngine) addPlaced(bin *model.Bin, k int) {
+	lo, hi := bin.Box(k)
+	e.addLevel(lo[model.HeightAxis], hi[model.HeightAxis]-lo[model.HeightAxis])
 }
 
 // addLevel records an item of height h placed at height y.
@@ -157,8 +163,6 @@ func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
 		return false
 	}
 
-	dims := rotation.DimensionsFor(item, bestRT)
-
 	item.RotationType = bestRT
 	item.Position = [3]float64{0, newY, 0}
 
@@ -174,7 +178,7 @@ func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
 	}
 
 	bin.PlaceItem(item)
-	e.addLevel(item.Position[model.HeightAxis], dims[1])
+	e.addPlaced(bin, len(bin.Items)-1)
 	return true
 }
 
@@ -215,7 +219,7 @@ func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLev
 			}
 
 			bin.PlaceItem(item)
-			e.addLevel(item.Position[model.HeightAxis], dims[1])
+			e.addPlaced(bin, len(bin.Items)-1)
 			return true
 		}
 	}
@@ -230,30 +234,27 @@ func (e *LAFFEngine) levelCandidates(bin *model.Bin, lvl *laffLevel) [][3]float6
 	candidates := make([][3]float64, 0, 1+3*len(bin.Items))
 	candidates = append(candidates, [3]float64{0, lvl.y, 0})
 
-	for _, placed := range bin.Items {
-		py := placed.Position[model.HeightAxis]
+	for k := range bin.Items {
+		lo, hi := bin.Box(k)
 		// Only consider items in or overlapping this level.
-		if py > lvl.y+lvl.height+epsilon || py+placed.Dimension()[model.HeightAxis] < lvl.y-epsilon {
+		if lo[1] > lvl.y+lvl.height+epsilon || hi[1] < lvl.y-epsilon {
 			continue
 		}
 
-		dim := placed.Dimension()
-		pp := placed.Position
-
 		// 2D candidates (on the level floor).
 		candidates = append(candidates,
-			[3]float64{pp[0] + dim[0], lvl.y, pp[2]},
-			[3]float64{pp[0], lvl.y, pp[2] + dim[2]},
+			[3]float64{hi[0], lvl.y, lo[2]},
+			[3]float64{lo[0], lvl.y, hi[2]},
 		)
 
 		if !e.fast {
 			// Full variant: allow stacking within the level.
-			stackY := pp[1] + dim[1]
+			stackY := hi[1]
 			if stackY < lvl.y+lvl.height-epsilon && stackY >= lvl.y-epsilon {
 				candidates = append(candidates,
-					[3]float64{pp[0], stackY, pp[2]},
-					[3]float64{pp[0] + dim[0], stackY, pp[2]},
-					[3]float64{pp[0], stackY, pp[2] + dim[2]},
+					[3]float64{lo[0], stackY, lo[2]},
+					[3]float64{hi[0], stackY, lo[2]},
+					[3]float64{lo[0], stackY, hi[2]},
 				)
 			}
 		}

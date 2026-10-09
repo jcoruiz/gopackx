@@ -1833,11 +1833,7 @@ func (e *thirdOrderEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	// creates 3 separate engine instances.
 	item.Placed = true
 	item.Position = [3]float64{0, 0, 0}
-	dim := item.Dimension()
-	item.PlacedDim = dim
-	bin.Items = append(bin.Items, item)
-	bin.ItemWeight += item.Weight
-	bin.ItemVolume += item.Volume
+	bin.PlaceItem(item)
 	return true
 }
 
@@ -2222,11 +2218,7 @@ func (e *limitedEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	// Place the item.
 	item.Placed = true
 	item.Position = [3]float64{float64(len(bin.Items)) * 15, 0, 0}
-	dim := item.Dimension()
-	item.PlacedDim = dim
-	bin.Items = append(bin.Items, item)
-	bin.ItemWeight += item.Weight
-	bin.ItemVolume += item.Volume
+	bin.PlaceItem(item)
 	return true
 }
 

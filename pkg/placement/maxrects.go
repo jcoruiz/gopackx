@@ -77,8 +77,8 @@ func (e *MaxRectsEngine) initBin(bin *model.Bin) {
 		w: bin.Width, h: bin.Height, d: bin.Depth,
 	})
 	// Rebuild spaces from items already in the bin.
-	for _, item := range bin.Items {
-		e.splitSpaces(item.Position, item.PlacedDim)
+	for k := range bin.Items {
+		e.splitSpaces(bin.Box(k))
 	}
 }
 
@@ -172,7 +172,7 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 			continue
 		}
 		bin.PlaceItem(item)
-		e.splitSpaces(c.pos, c.dim)
+		e.splitSpaces(bin.Box(len(bin.Items) - 1))
 		return true
 	}
 
@@ -183,25 +183,21 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 func (e *MaxRectsEngine) findLowestY(bin *model.Bin, x, z float64, dim [3]float64) float64 {
 	maxY := 0.0
-	for _, placed := range bin.Items {
-		pDim := placed.PlacedDim
-		pPos := placed.Position
+	for k := range bin.Items {
+		lo, hi := bin.Box(k)
 		// Check XZ overlap.
-		if x < pPos[0]+pDim[0]-epsilon && pPos[0] < x+dim[0]-epsilon &&
-			z < pPos[2]+pDim[2]-epsilon && pPos[2] < z+dim[2]-epsilon {
-			top := pPos[1] + pDim[1]
-			if top > maxY {
-				maxY = top
-			}
+		if x < hi[0]-epsilon && lo[0] < x+dim[0]-epsilon &&
+			z < hi[2]-epsilon && lo[2] < z+dim[2]-epsilon && hi[1] > maxY {
+			maxY = hi[1]
 		}
 	}
 	return maxY
 }
 
 // splitSpaces removes or splits all free spaces that overlap with the placed item.
-func (e *MaxRectsEngine) splitSpaces(pos, dim [3]float64) {
-	ix0, iy0, iz0 := pos[0], pos[1], pos[2]
-	ix1, iy1, iz1 := pos[0]+dim[0], pos[1]+dim[1], pos[2]+dim[2]
+func (e *MaxRectsEngine) splitSpaces(lo, hi [3]float64) {
+	ix0, iy0, iz0 := lo[0], lo[1], lo[2]
+	ix1, iy1, iz1 := hi[0], hi[1], hi[2]
 
 	// Sub-spaces are collected apart and added after the loop: appending them
 	// to e.spaces while removing split spaces from it would let a later

@@ -10,6 +10,7 @@ import (
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/packer"
 	"github.com/jcoruiz/gopackx/pkg/placement"
+	"github.com/jcoruiz/gopackx/pkg/stability"
 )
 
 // weightOnTop returns the weight resting directly on top of item a, each
@@ -159,5 +160,50 @@ func TestPackKeepsItemsAlreadyInABin(t *testing.T) {
 	}
 	if len(bin.Items) != 1 {
 		t.Error("the added bin was modified")
+	}
+}
+
+// The load a bin tracks as items are placed matches stability.LoadOnTop
+// computed from scratch, and every load limit holds, for every engine.
+func TestTrackedLoadsMatchLoadsFromScratch(t *testing.T) {
+	all := append(append([]engineSpec{}, engines...), func() []engineSpec {
+		var out []engineSpec
+		for _, e := range enginesWithStability {
+			out = append(out, engineSpec(e))
+		}
+		return out
+	}()...)
+	for _, eng := range all {
+		t.Run(eng.name, func(t *testing.T) {
+			for seed := range 20 {
+				p := packer.NewPacker(packer.WithPlacementEngine(eng.new()))
+				p.AddBin(model.NewBin("a", 40, 40, 40, 0))
+				p.AddBin(model.NewBin("b", 30, 50, 30, 0))
+				for i := range 30 {
+					v := seed*31 + i*17
+					var opts []model.ItemOption
+					if v%3 == 0 {
+						opts = append(opts, model.ItemLoadBear(float64(5+v%20)))
+					}
+					w := float64(5 * (1 + v%4))
+					p.AddItem(model.NewItem("i"+strconv.Itoa(i), w, float64(5*(1+v%3)), float64(5*(1+(v/3)%4)), float64(1+v%9), opts...))
+				}
+				res, err := p.Pack(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, bin := range res.Bins {
+					for i, it := range bin.Items {
+						want := stability.LoadOnTop(it, bin.Items)
+						if math.Abs(bin.Load(i)-want) > 1e-6 {
+							t.Fatalf("seed %d: Load(%s) = %v, from scratch %v", seed, it.ID, bin.Load(i), want)
+						}
+						if it.LoadBear > 0 && want > it.LoadBear+1e-6 {
+							t.Errorf("seed %d: %s carries %.2f kg, limit %.2f", seed, it.ID, want, it.LoadBear)
+						}
+					}
+				}
+			}
+		})
 	}
 }

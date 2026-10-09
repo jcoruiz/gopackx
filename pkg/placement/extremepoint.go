@@ -233,15 +233,14 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 	)
 
 	// Interaction points: where existing items' faces intersect with the new item.
-	for _, placed := range e.items {
+	for k, placed := range e.items {
 		if placed == item {
 			continue
 		}
-		pd := placed.PlacedDim
-		pp := placed.Position
+		pp, phi := e.bin.Box(k)
 
 		// Existing item's right face cuts through new item's X range.
-		rightX := pp[0] + pd[0]
+		rightX := phi[0]
 		if rightX > px+epsilon && rightX < px+dim[0]-epsilon {
 			candidates = append(candidates,
 				[3]float64{rightX, py + dim[1], pz},
@@ -250,7 +249,7 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 		}
 
 		// Existing item's top face cuts through new item's Y range.
-		topY := pp[1] + pd[1]
+		topY := phi[1]
 		if topY > py+epsilon && topY < py+dim[1]-epsilon {
 			candidates = append(candidates,
 				[3]float64{px + dim[0], topY, pz},
@@ -259,7 +258,7 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 		}
 
 		// Existing item's back face cuts through new item's Z range.
-		backZ := pp[2] + pd[2]
+		backZ := phi[2]
 		if backZ > pz+epsilon && backZ < pz+dim[2]-epsilon {
 			candidates = append(candidates,
 				[3]float64{px + dim[0], py, backZ},
@@ -269,26 +268,26 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 
 		// New item's faces cut through existing item's ranges (reverse direction).
 		newRight := px + dim[0]
-		if newRight > pp[0]+epsilon && newRight < pp[0]+pd[0]-epsilon {
+		if newRight > pp[0]+epsilon && newRight < phi[0]-epsilon {
 			candidates = append(candidates,
-				[3]float64{newRight, pp[1] + pd[1], pp[2]},
-				[3]float64{newRight, pp[1], pp[2] + pd[2]},
+				[3]float64{newRight, phi[1], pp[2]},
+				[3]float64{newRight, pp[1], phi[2]},
 			)
 		}
 
 		newTop := py + dim[1]
-		if newTop > pp[1]+epsilon && newTop < pp[1]+pd[1]-epsilon {
+		if newTop > pp[1]+epsilon && newTop < phi[1]-epsilon {
 			candidates = append(candidates,
-				[3]float64{pp[0] + pd[0], newTop, pp[2]},
-				[3]float64{pp[0], newTop, pp[2] + pd[2]},
+				[3]float64{phi[0], newTop, pp[2]},
+				[3]float64{pp[0], newTop, phi[2]},
 			)
 		}
 
 		newBack := pz + dim[2]
-		if newBack > pp[2]+epsilon && newBack < pp[2]+pd[2]-epsilon {
+		if newBack > pp[2]+epsilon && newBack < phi[2]-epsilon {
 			candidates = append(candidates,
-				[3]float64{pp[0] + pd[0], pp[1], newBack},
-				[3]float64{pp[0], pp[1] + pd[1], newBack},
+				[3]float64{phi[0], pp[1], newBack},
+				[3]float64{pp[0], phi[1], newBack},
 			)
 		}
 	}
@@ -326,12 +325,12 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 	}
 
 	bestY := 0.0
-	for _, item := range e.items {
-		dim := item.PlacedDim
-		itemTop := item.Position[1] + dim[1]
+	for k := range e.items {
+		lo, hi := e.bin.Box(k)
+		itemTop := hi[1]
 
-		if pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
-			pos[2] >= item.Position[2]-epsilon && pos[2] < item.Position[2]+dim[2]+epsilon &&
+		if pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
+			pos[2] >= lo[2]-epsilon && pos[2] < hi[2]+epsilon &&
 			itemTop <= pos[1]+epsilon && itemTop > bestY {
 			bestY = itemTop
 		}
@@ -342,14 +341,14 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 }
 
 func (e *ExtremePointEngine) isInsideAnyItem(pos [3]float64) bool {
-	for _, item := range e.items {
-		dim := item.PlacedDim
-		if pos[0] > item.Position[0]+epsilon &&
-			pos[0] < item.Position[0]+dim[0]-epsilon &&
-			pos[1] > item.Position[1]+epsilon &&
-			pos[1] < item.Position[1]+dim[1]-epsilon &&
-			pos[2] > item.Position[2]+epsilon &&
-			pos[2] < item.Position[2]+dim[2]-epsilon {
+	for k := range e.items {
+		lo, hi := e.bin.Box(k)
+		if pos[0] > lo[0]+epsilon &&
+			pos[0] < hi[0]-epsilon &&
+			pos[1] > lo[1]+epsilon &&
+			pos[1] < hi[1]-epsilon &&
+			pos[2] > lo[2]+epsilon &&
+			pos[2] < hi[2]-epsilon {
 			return true
 		}
 	}
@@ -374,12 +373,12 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[1] < epsilon {
 		support++
 	} else {
-		for _, item := range e.items {
-			dim := item.PlacedDim
-			itemTop := item.Position[1] + dim[1]
+		for k := range e.items {
+			lo, hi := e.bin.Box(k)
+			itemTop := hi[1]
 			if math.Abs(pos[1]-itemTop) < epsilon &&
-				pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
-				pos[2] >= item.Position[2]-epsilon && pos[2] < item.Position[2]+dim[2]+epsilon {
+				pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
+				pos[2] >= lo[2]-epsilon && pos[2] < hi[2]+epsilon {
 				support++
 				break
 			}
@@ -390,12 +389,12 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[0] < epsilon {
 		support++
 	} else {
-		for _, item := range e.items {
-			dim := item.PlacedDim
-			itemRight := item.Position[0] + dim[0]
+		for k := range e.items {
+			lo, hi := e.bin.Box(k)
+			itemRight := hi[0]
 			if math.Abs(pos[0]-itemRight) < epsilon &&
-				pos[1] >= item.Position[1]-epsilon && pos[1] < item.Position[1]+dim[1]+epsilon &&
-				pos[2] >= item.Position[2]-epsilon && pos[2] < item.Position[2]+dim[2]+epsilon {
+				pos[1] >= lo[1]-epsilon && pos[1] < hi[1]+epsilon &&
+				pos[2] >= lo[2]-epsilon && pos[2] < hi[2]+epsilon {
 				support++
 				break
 			}
@@ -406,12 +405,12 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[2] < epsilon {
 		support++
 	} else {
-		for _, item := range e.items {
-			dim := item.PlacedDim
-			itemBack := item.Position[2] + dim[2]
+		for k := range e.items {
+			lo, hi := e.bin.Box(k)
+			itemBack := hi[2]
 			if math.Abs(pos[2]-itemBack) < epsilon &&
-				pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
-				pos[1] >= item.Position[1]-epsilon && pos[1] < item.Position[1]+dim[1]+epsilon {
+				pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
+				pos[1] >= lo[1]-epsilon && pos[1] < hi[1]+epsilon {
 				support++
 				break
 			}
@@ -483,35 +482,34 @@ func (e *ExtremePointEngine) calculateMaxSpace(ep *ExtremePoint) {
 		e.bin.Depth - ep.Pos[2],
 	}
 
-	for _, item := range e.items {
-		dim := item.PlacedDim
-		ip := item.Position
+	for k := range e.items {
+		lo, hi := e.bin.Box(k)
 
 		// Width: item to the right, point within item's Y-Z cross-section.
-		if ip[0] > ep.Pos[0]-epsilon &&
-			ep.Pos[1] >= ip[1]-epsilon && ep.Pos[1] < ip[1]+dim[1]-epsilon &&
-			ep.Pos[2] >= ip[2]-epsilon && ep.Pos[2] < ip[2]+dim[2]-epsilon {
-			gap := ip[0] - ep.Pos[0]
+		if lo[0] > ep.Pos[0]-epsilon &&
+			ep.Pos[1] >= lo[1]-epsilon && ep.Pos[1] < hi[1]-epsilon &&
+			ep.Pos[2] >= lo[2]-epsilon && ep.Pos[2] < hi[2]-epsilon {
+			gap := lo[0] - ep.Pos[0]
 			if gap >= -epsilon && gap < ep.MaxSpace[0] {
 				ep.MaxSpace[0] = math.Max(0, gap)
 			}
 		}
 
 		// Height: item above, point within item's X-Z cross-section.
-		if ip[1] > ep.Pos[1]-epsilon &&
-			ep.Pos[0] >= ip[0]-epsilon && ep.Pos[0] < ip[0]+dim[0]-epsilon &&
-			ep.Pos[2] >= ip[2]-epsilon && ep.Pos[2] < ip[2]+dim[2]-epsilon {
-			gap := ip[1] - ep.Pos[1]
+		if lo[1] > ep.Pos[1]-epsilon &&
+			ep.Pos[0] >= lo[0]-epsilon && ep.Pos[0] < hi[0]-epsilon &&
+			ep.Pos[2] >= lo[2]-epsilon && ep.Pos[2] < hi[2]-epsilon {
+			gap := lo[1] - ep.Pos[1]
 			if gap >= -epsilon && gap < ep.MaxSpace[1] {
 				ep.MaxSpace[1] = math.Max(0, gap)
 			}
 		}
 
 		// Depth: item behind, point within item's X-Y cross-section.
-		if ip[2] > ep.Pos[2]-epsilon &&
-			ep.Pos[0] >= ip[0]-epsilon && ep.Pos[0] < ip[0]+dim[0]-epsilon &&
-			ep.Pos[1] >= ip[1]-epsilon && ep.Pos[1] < ip[1]+dim[1]-epsilon {
-			gap := ip[2] - ep.Pos[2]
+		if lo[2] > ep.Pos[2]-epsilon &&
+			ep.Pos[0] >= lo[0]-epsilon && ep.Pos[0] < hi[0]-epsilon &&
+			ep.Pos[1] >= lo[1]-epsilon && ep.Pos[1] < hi[1]-epsilon {
+			gap := lo[2] - ep.Pos[2]
 			if gap >= -epsilon && gap < ep.MaxSpace[2] {
 				ep.MaxSpace[2] = math.Max(0, gap)
 			}
