@@ -105,7 +105,9 @@
 // Every Solve respects context deadlines and cancellation. If the context
 // ends before the solver finishes, it returns the best result found so far
 // together with the context error; every item is in the result, placed or
-// unfitted. Deadlines also work under GOOS=js (WebAssembly), where the timer
+// unfitted. The error means that work was skipped: a solver that completes
+// its last step after the deadline has passed returns a nil error, because
+// its result is complete. Deadlines also work under GOOS=js (WebAssembly), where the timer
 // behind context.WithTimeout cannot fire while a solver computes.
 //
 // Invalid input (see [model.Validate]) returns a nil result and an error that

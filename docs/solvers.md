@@ -34,7 +34,7 @@ result, err := gopackx.Pack(ctx, boxTypes, items, gopackx.Optimize())
 All solvers share these rules:
 
 - **Invalid input** (a NaN or non-positive size, a negative weight, an unknown rotation...) returns a nil result and an error that wraps `model.ErrInvalidInput`. See `model.Validate`.
-- **Deadlines and cancellation**: when the context ends before the solver finishes, `Solve` returns the best result found so far **and** the context error. Every item is in the result, placed or unfitted. When the solver finishes in time, the error is nil. Solvers check the context between item placements, so they stop within one placement of the deadline, also in WebAssembly.
+- **Deadlines and cancellation**: when the context ends before the solver finishes, `Solve` returns the best result found so far **and** the context error. Every item is in the result, placed or unfitted. Solvers check the context between item placements, so they stop within one placement of the deadline, also in WebAssembly. The error means that work was skipped: a solver that completes its last step after the deadline has passed returns a nil error, because its result is complete.
 - **Determinism**: the same input always gives the same result. The Metaheuristic draws its random choices from a generator seeded with `MetaRandomSeed` (default 1), and the Parallel solver breaks ties by configuration order.
 - **Inputs are not modified**: solvers pack copies; read the packed bins from `Result.Bins`. Bins opened from a box type record it in `Bin.TypeID`.
 
