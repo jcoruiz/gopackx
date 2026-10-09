@@ -17,13 +17,11 @@ item2 := model.NewItem("light", 30, 30, 30, 50)    // 50 kg
 
 ### How It Works
 
-Before placing an item, the engine checks:
+Before placing an item, the engine checks `bin.CanCarry(item.Weight)`: the
+weight already placed plus the new item must not exceed `MaxWeight`.
 
-```
-bin.RemainingWeight() >= item.Weight
-```
-
-Where `RemainingWeight()` returns `MaxWeight - TotalWeight()` (sum of all placed items' weights).
+A `MaxWeight` of **0 means no weight limit**, like a `Cost` or `LoadBear` of 0.
+(Before v0.3.0 it meant that the bin could hold nothing.)
 
 Items that exceed the remaining capacity are **skipped** (not placed) and appear in `result.UnfittedItems`.
 
@@ -31,7 +29,8 @@ Items that exceed the remaining capacity are **skipped** (not placed) and appear
 
 ```go
 bin.TotalWeight()      // sum of placed items' weights
-bin.RemainingWeight()  // capacity left
+bin.RemainingWeight()  // capacity left (+Inf without a limit)
+bin.HasWeightLimit()   // false when MaxWeight is 0
 bin.MaxWeight          // original capacity
 ```
 
@@ -96,11 +95,16 @@ Specifically, for each placed item with `Fragile == true`:
 3. Check if there is overlap in both the width (X) and depth (Z) axes
 4. If all three conditions are met, the placement fails
 
+The other direction is checked too: a fragile item is never slid into a gap
+under an item placed earlier (for example under an overhang), which would leave
+that item resting on it. Before v0.3.0 only the first direction was checked.
+
 Fragile items can still have items placed **beside** them (same Y level or below). Only items **on top** are blocked.
 
 ## Load-Bearing Capacity
 
-Items can have a maximum weight they can support on top.
+Items can have a maximum weight they can support on top: everything stacked
+on them, not only the item touching them.
 
 ```go
 // This item can support up to 10 kg on top
@@ -109,23 +113,36 @@ item := model.NewItem("cardboard-box", 40, 30, 30, 5, model.ItemLoadBear(10))
 
 ### How It Works
 
-Load-bearing is checked **only when stability is enabled** on the engine:
+Load limits are always enforced, with or without stability. Every placement
+checks both directions:
 
-```go
-engine := placement.NewPivotEngine(placement.WithStability(0.7))
+- the items under the new item, directly or through others, must not end up
+  carrying more than their limit;
+- if the new item is slid under items placed earlier (for example under an
+  overhang), the weight they put on it must stay within its own limit.
+
+The load on an item is computed through the whole stack. Each item passes its
+own weight plus the load on it down to the items it rests on, split in
+proportion to the contact area with each:
+
+```
+load(item) = sum over items resting on item of
+             (above.Weight + load(above)) * contact(above, item) / contact(above, all its supports)
 ```
 
-When a new item is placed, the engine temporarily adds it to the bin, then verifies that no item below has its load-bearing capacity exceeded.
+`contact` is the area where the base of the item above touches the top face of
+the item below. The whole weight of an overhanging item goes to what supports
+it. Example: a crate that holds 30 kg, with a 15 kg box on it and a 20 kg box
+on that box, carries 35 kg and the second box is rejected.
 
-The weight calculation uses **proportional distribution** based on overlap area:
+`bin.Load(i)` returns the load on item `i` of a packed bin, and
+`stability.LoadOnTop` computes it from scratch for any set of items.
 
-```
-weight_on_item = sum over items_above of (item_above.Weight * overlap_area / item_above.base_area)
-```
+If `LoadBear` is 0 (default), no load limit is enforced. A fragile item cannot
+have anything resting on it at all.
 
-Where `overlap_area` is the intersection of the XZ projections of the two items, and the above item must be resting directly on top (its bottom Y equals the below item's top Y).
-
-If `LoadBear` is 0 (default), no load limit is enforced. If `Fragile` is true, *any* weight on top causes failure (equivalent to `LoadBear(0)` with strict enforcement).
+Before v0.3.0, limits were only checked with stability enabled and only
+counted the items touching an item directly.
 
 ### Example: Stacking Constraints
 
@@ -323,8 +340,8 @@ Constraints are checked in this order during placement validation:
 2. **Positive position** -- no negative coordinates
 3. **Weight capacity** -- bin has enough remaining weight
 4. **Intersection** -- no overlap with already-placed items
-5. **Stability** -- support ratio met (if stability enabled)
-6. **Fragile** -- not placed on top of any fragile item
-7. **Load-bearing** -- items below not overloaded (if stability enabled)
+5. **Fragile** -- not placed on top of a fragile item, and if the item is fragile, nothing already placed rests on it
+6. **Load limits** -- neither the item nor any item under it carries more than its `LoadBear`
+7. **Stability** -- support ratio met (if stability enabled)
 
 If any check fails, the placement is rejected and the engine tries the next candidate position or rotation.

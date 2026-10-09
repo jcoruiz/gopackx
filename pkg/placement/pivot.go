@@ -70,9 +70,11 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	stab := e.enableStability
 	ratio := e.supportRatio
 
-	// Conflict-driven rejection: candidates are first tested against the
-	// last items that blocked one.
-	var bl blockers
+	// Conflict-driven rejection: track recent blockers' AABBs on stack.
+	const maxBlockers = 4
+	var blockers [maxBlockers][6]float64
+	nBlockers := 0
+	writeIdx := 0
 
 	for _, pivot := range pivots {
 		for ri := range nRot {
@@ -85,7 +87,18 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				continue
 			}
 
-			if bl.hit(pivot, dim) {
+			// Conflict-driven pre-rejection from stack-cached blockers.
+			blocked := false
+			for bi := range nBlockers {
+				b := &blockers[bi]
+				if pivot[0] < b[3]-epsilon && b[0] < px1-epsilon &&
+					pivot[1] < b[4]-epsilon && b[1] < py1-epsilon &&
+					pivot[2] < b[5]-epsilon && b[2] < pz1-epsilon {
+					blocked = true
+					break
+				}
+			}
+			if blocked {
 				continue
 			}
 
@@ -94,7 +107,12 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 			blocker := canPlaceDimBlocker(bin, item, dim, stab, ratio)
 			if blocker >= 0 {
-				bl.add(bin, blocker)
+				lo, hi := bin.Box(blocker)
+				blockers[writeIdx] = [6]float64{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]}
+				writeIdx = (writeIdx + 1) & (maxBlockers - 1)
+				if nBlockers < maxBlockers {
+					nBlockers++
+				}
 				continue
 			}
 			if blocker == -2 {

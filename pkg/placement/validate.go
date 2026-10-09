@@ -149,7 +149,7 @@ func (b *blockers) hit(pos, dim [3]float64) bool {
 func (b *blockers) add(bin *model.Bin, idx int) {
 	lo, hi := bin.Box(idx)
 	b.boxes[b.next] = [6]float64{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]}
-	b.next = (b.next + 1) % len(b.boxes)
+	b.next = (b.next + 1) & (len(b.boxes) - 1) // len is a power of two
 	if b.n < len(b.boxes) {
 		b.n++
 	}

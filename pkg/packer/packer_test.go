@@ -232,6 +232,10 @@ func BenchmarkPack50Items_LAFFFast(b *testing.B) {
 	benchmarkPack50(b, placement.NewLAFFEngine(placement.LAFFFast()))
 }
 
+func BenchmarkPack50Items_MaxRects(b *testing.B) {
+	benchmarkPack50(b, placement.NewMaxRectsEngine())
+}
+
 func benchmarkPack50(b *testing.B, engine placement.Engine) {
 	b.Helper()
 	for range b.N {

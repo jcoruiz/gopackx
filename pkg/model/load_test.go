@@ -88,3 +88,31 @@ func TestLoadLimitHoldsThroughTheStack(t *testing.T) {
 		t.Error("15 kg would rest on an item that holds 12")
 	}
 }
+
+// Loads computed when tracking starts late match loads tracked from the
+// first item.
+func TestLateLoadTrackingMatchesTrackingFromTheStart(t *testing.T) {
+	place := func(b *Bin) {
+		b.PlaceItem(at(NewItem("x", 6, 10, 10, 1), 0, 0, 0))
+		b.PlaceItem(at(NewItem("y", 10, 5, 10, 8), 0, 10, 0))
+		b.PlaceItem(at(NewItem("z", 10, 5, 10, 3), 0, 15, 0))
+		b.PlaceItem(at(NewItem("c", 4, 10, 10, 1), 6, 0, 0)) // slid under y
+		b.PlaceItem(at(NewItem("w", 5, 5, 10, 2), 0, 20, 0))
+	}
+	late := NewBin("late", 20, 30, 10, 0)
+	place(late)
+	if late.tracked {
+		t.Fatal("a bin without load limits should not track loads while packing")
+	}
+	early := NewBin("early", 20, 30, 10, 0)
+	early.tracked = true
+	place(early)
+	for i := range late.Items {
+		if !near(late.Load(i), early.Load(i)) {
+			t.Errorf("item %s: late tracking %v, from the start %v", late.Items[i].ID, late.Load(i), early.Load(i))
+		}
+	}
+	if !near(late.Load(0), 0.6*(8+3+2)) {
+		t.Errorf("Load(x) = %v, want 60%% of the 13 kg above", late.Load(0))
+	}
+}

@@ -183,6 +183,7 @@ type Bin struct {
 	boxes   []float64   // per item: x0, y0, z0, x1, y1, z1
 	fragile []int       // indexes of fragile items
 	limited int         // number of items with a load limit
+	tracked bool        // loads and loadLog are kept for every item
 	loads   []float64   // per item: weight resting on it, everything above counted
 	loadLog [][]loadAdd // per item: the load it added to the items below
 }
@@ -256,10 +257,25 @@ func (b *Bin) PlaceItem(item *Item) {
 	lo := item.Position
 	hi := [3]float64{lo[0] + dim[0], lo[1] + dim[1], lo[2] + dim[2]}
 
+	if item.LoadBear > 0 {
+		b.limited++
+		b.trackLoads()
+	}
+	if !b.tracked {
+		b.appendBox(item, lo, hi)
+		return
+	}
+
 	// Items placed earlier may rest on this one (it was slid under them):
 	// part of their weight moves from their other supports to it.
 	onTop, moved := b.loadAbove(lo, hi)
+	b.appendBox(item, lo, hi)
+	b.loads = append(b.loads, onTop)
+	_, added := b.passDown(moved, b.shareDown(nil, lo, hi, item.Weight+onTop), true)
+	b.loadLog = append(b.loadLog, added)
+}
 
+func (b *Bin) appendBox(item *Item, lo, hi [3]float64) {
 	b.Items = append(b.Items, item)
 	b.boxes = append(b.boxes, lo[0], lo[1], lo[2], hi[0], hi[1], hi[2])
 	b.weight += item.Weight
@@ -267,25 +283,46 @@ func (b *Bin) PlaceItem(item *Item) {
 	if item.Fragile {
 		b.fragile = append(b.fragile, len(b.Items)-1)
 	}
-	if item.LoadBear > 0 {
-		b.limited++
+}
+
+// trackLoads starts keeping loads, computing them for the items already
+// placed as if they had been tracked from the start. Bins without load
+// limits never need loads, so they skip this work.
+func (b *Bin) trackLoads() {
+	if b.tracked {
+		return
 	}
-	b.loads = append(b.loads, onTop)
-	_, added := b.passDown(moved, b.shareDown(nil, lo, hi, item.Weight+onTop), true)
-	b.loadLog = append(b.loadLog, added)
+	items, boxes := b.Items, b.boxes
+	b.tracked = true
+	b.loads = make([]float64, 0, len(items))
+	b.loadLog = make([][]loadAdd, 0, len(items))
+	for k := range items {
+		// Replay item k against the items placed before it.
+		b.Items, b.boxes = items[:k], boxes[:6*k]
+		lo := [3]float64{boxes[6*k], boxes[6*k+1], boxes[6*k+2]}
+		hi := [3]float64{boxes[6*k+3], boxes[6*k+4], boxes[6*k+5]}
+		onTop, moved := b.loadAbove(lo, hi)
+		b.Items, b.boxes = items[:k+1], boxes[:6*(k+1)]
+		b.loads = append(b.loads, onTop)
+		_, added := b.passDown(moved, b.shareDown(nil, lo, hi, items[k].Weight+onTop), true)
+		b.loadLog = append(b.loadLog, added)
+	}
+	b.Items, b.boxes = items, boxes
 }
 
 // RemoveLastItem removes the last placed item and updates tracked weight/volume.
 func (b *Bin) RemoveLastItem() *Item {
 	n := len(b.Items)
 	item := b.Items[n-1]
-	for _, a := range b.loadLog[n-1] {
-		b.loads[a.idx] -= a.w
+	if b.tracked {
+		for _, a := range b.loadLog[n-1] {
+			b.loads[a.idx] -= a.w
+		}
+		b.loads = b.loads[:n-1]
+		b.loadLog = b.loadLog[:n-1]
 	}
 	b.Items = b.Items[:n-1]
 	b.boxes = b.boxes[:6*(n-1)]
-	b.loads = b.loads[:n-1]
-	b.loadLog = b.loadLog[:n-1]
 	b.weight -= item.Weight
 	b.volume -= item.Volume
 	if item.Fragile {
@@ -349,6 +386,7 @@ func (b *Bin) HasItemOnTop(pos, dim [3]float64) bool {
 // item passes its own weight plus the load on it to the items directly
 // under it, split in proportion to how much of its base rests on each.
 func (b *Bin) Load(i int) float64 {
+	b.trackLoads()
 	return b.loads[i]
 }
 
@@ -359,6 +397,7 @@ func (b *Bin) FitsLoadLimits(item *Item, pos, dim [3]float64) bool {
 	if len(b.Items) == 0 || (b.limited == 0 && item.LoadBear <= 0) {
 		return true
 	}
+	b.trackLoads()
 	hi := [3]float64{pos[0] + dim[0], pos[1] + dim[1], pos[2] + dim[2]}
 	onTop, moved := b.loadAbove(pos, hi)
 	if item.LoadBear > 0 && onTop > item.LoadBear+weightTolerance {
