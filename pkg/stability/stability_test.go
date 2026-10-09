@@ -174,3 +174,24 @@ func TestLoadOnTopThinItemsOnTheSameLevel(t *testing.T) {
 		t.Errorf("LoadOnTop(a) = %v, want 0", got)
 	}
 }
+
+// An item reached through two paths (a diamond) counts its load once per
+// path share, computed once.
+func TestLoadOnTopDiamond(t *testing.T) {
+	place := func(id string, w, h, d, weight, x, y, z float64) *model.Item {
+		it := model.NewItem(id, w, h, d, weight)
+		it.Position = [3]float64{x, y, z}
+		return it
+	}
+	base := place("base", 10, 10, 10, 1, 0, 0, 0)
+	left := place("left", 5, 5, 10, 2, 0, 10, 0)
+	right := place("right", 5, 5, 10, 2, 5, 10, 0)
+	top := place("top", 10, 5, 10, 6, 0, 15, 0)
+	all := []*model.Item{base, left, right, top}
+	if got := LoadOnTop(base, all); math.Abs(got-10) > 1e-9 {
+		t.Errorf("LoadOnTop(base) = %v, want 10 (2 + 2 + 6)", got)
+	}
+	if got := LoadOnTop(left, all); math.Abs(got-3) > 1e-9 {
+		t.Errorf("LoadOnTop(left) = %v, want 3 (half of top)", got)
+	}
+}

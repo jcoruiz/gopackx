@@ -2,6 +2,7 @@ package packer_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"reflect"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/jcoruiz/gopackx/pkg/packer"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/stability"
+	"github.com/jcoruiz/gopackx/pkg/strategy"
 )
 
 // weightOnTop returns the weight resting directly on top of item a, each
@@ -205,5 +207,28 @@ func TestTrackedLoadsMatchLoadsFromScratch(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPackRejectsInvalidInput(t *testing.T) {
+	p := packer.NewPacker()
+	p.AddBin(model.NewBin("b", 10, 10, 10, 0))
+	p.AddItem(model.NewItem("bad", 1, -1, 1, 1))
+	res, err := p.Pack(context.Background())
+	if !errors.Is(err, model.ErrInvalidInput) || res != nil {
+		t.Errorf("Pack = %v, %v; want nil and an error wrapping ErrInvalidInput", res, err)
+	}
+}
+
+// NextFit stops at a cancelled context like the other strategies.
+func TestNextFitReturnsPartialResultWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	p := packer.NewPacker(packer.WithStrategy(strategy.NextFit))
+	p.AddBin(model.NewBin("b", 10, 10, 10, 0))
+	p.AddItem(model.NewItem("a", 1, 1, 1, 1))
+	res, err := p.Pack(ctx)
+	if !errors.Is(err, context.Canceled) || res == nil || res.Stats.UnfittedCount != 1 {
+		t.Errorf("Pack = %+v, %v; want the item unfitted and context.Canceled", res, err)
 	}
 }

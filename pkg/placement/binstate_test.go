@@ -145,3 +145,81 @@ func TestEngineStateFollowsRemovedItems(t *testing.T) {
 		})
 	}
 }
+
+// After Reset an engine forgets every bin and places like a new engine.
+func TestResetForgetsEveryBin(t *testing.T) {
+	for name, newEngine := range engineFactories {
+		t.Run(name, func(t *testing.T) {
+			used := newEngine()
+			first := model.NewBin("first", 20, 20, 20, 0)
+			for i := range 5 {
+				used.PlaceItem(first, model.NewItem(strconv.Itoa(i), 5, 5, 5, 1))
+			}
+			used.(Resetter).Reset()
+
+			second, fresh := model.NewBin("second", 20, 20, 20, 0), model.NewBin("fresh", 20, 20, 20, 0)
+			fe := newEngine()
+			for i := range 5 {
+				a, b := model.NewItem(strconv.Itoa(i), 6, 4, 5, 1), model.NewItem(strconv.Itoa(i), 6, 4, 5, 1)
+				okA, okB := used.PlaceItem(second, a), fe.PlaceItem(fresh, b)
+				if okA != okB || a.Position != b.Position {
+					t.Fatalf("item %d: reset engine %v at %v, new engine %v at %v", i, okA, a.Position, okB, b.Position)
+				}
+			}
+		})
+	}
+	var ep ExtremePointEngine
+	ep.PlaceItem(model.NewBin("b", 5, 5, 5, 0), model.NewItem("x", 1, 1, 1, 1))
+	ep.Reset()
+	if ep.bin != nil || ep.points != nil || ep.saved.m != nil {
+		t.Error("Reset should drop the extreme point engine's state")
+	}
+}
+
+// A point that ends up strictly inside a placed item is removed, together
+// with its key, so the position can be used again later.
+func TestExtremePointsInsideAPlacedItemAreRemoved(t *testing.T) {
+	e := NewExtremePointEngine()
+	bin := model.NewBin("b", 20, 20, 20, 0)
+	e.initBin(bin)
+	inside := &ExtremePoint{Pos: [3]float64{5, 5, 5}, MaxSpace: [3]float64{1, 1, 1}}
+	e.points = append(e.points, inside)
+	e.keys[pointKey(inside.Pos)] = struct{}{}
+
+	it := model.NewItem("block", 10, 10, 10, 1)
+	bin.PlaceItem(it) // at the origin, covering the point
+	e.items = bin.Items
+	e.onItemPlaced(it)
+
+	for _, p := range e.points {
+		if p == inside {
+			t.Fatal("the point inside the item was kept")
+		}
+	}
+	if _, ok := e.keys[pointKey(inside.Pos)]; ok {
+		t.Error("the removed point's key was kept")
+	}
+	if !e.isInsideAnyItem([3]float64{5, 5, 5}) || e.isInsideAnyItem([3]float64{15, 5, 5}) {
+		t.Error("isInsideAnyItem should tell points inside the block from points outside")
+	}
+}
+
+func TestCanPlaceRejectsNegativePositionsAndFragileItemsUnderOthers(t *testing.T) {
+	bin := model.NewBin("b", 20, 20, 20, 0)
+	shelf := model.NewItem("shelf", 10, 2, 10, 1)
+	shelf.Position = [3]float64{0, 10, 0}
+	bin.PlaceItem(shelf)
+
+	neg := model.NewItem("neg", 2, 2, 2, 1)
+	neg.Position = [3]float64{-1, 0, 0}
+	if got := canPlaceDimBlocker(bin, neg, neg.Dimension(), false, 0); got != -2 {
+		t.Errorf("negative position: got %d, want -2", got)
+	}
+
+	// A fragile box that would end up right under the floating shelf.
+	glass := model.NewItem("glass", 4, 10, 4, 1, model.ItemFragile())
+	glass.Position = [3]float64{0, 0, 0}
+	if got := canPlaceDimBlocker(bin, glass, glass.Dimension(), false, 0); got != -2 {
+		t.Errorf("fragile under the shelf: got %d, want -2", got)
+	}
+}
