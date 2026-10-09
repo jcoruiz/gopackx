@@ -46,6 +46,9 @@ func NewBranchBound(newEngine func() placement.Engine, opts ...BBOption) *Branch
 
 // Solve processes bins sequentially, using B&B to maximize items in each bin.
 func (bb *BranchBound) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,

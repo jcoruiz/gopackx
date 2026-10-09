@@ -59,6 +59,9 @@ func defaultConfigs() []ParallelConfig {
 
 // Solve runs all configurations concurrently and returns the best result.
 func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(p.configs) == 0 || len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,

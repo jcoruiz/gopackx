@@ -66,6 +66,9 @@ func NewMetaheuristic(newEngine func() placement.Engine, opts ...MetaOption) *Me
 // Solve finds a near-optimal packing by starting from a seed solution and
 // iteratively improving it with VNS neighborhood operators.
 func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,

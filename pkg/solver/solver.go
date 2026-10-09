@@ -8,6 +8,9 @@ import (
 )
 
 // Solver finds optimal or near-optimal packing solutions within a time budget.
+//
+// Invalid input (see [model.Validate]) makes Solve return a nil result and
+// an error that wraps [model.ErrInvalidInput].
 type Solver interface {
 	Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error)
 }

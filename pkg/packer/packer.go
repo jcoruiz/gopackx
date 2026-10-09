@@ -57,6 +57,9 @@ func (p *Packer) AddItem(item *model.Item) {
 
 // Pack runs the packing algorithm and returns the result.
 func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
+	if err := model.Validate(p.bins, p.items); err != nil {
+		return nil, err
+	}
 	if len(p.bins) == 0 || len(p.items) == 0 {
 		return &model.Result{
 			Bins:          p.bins,

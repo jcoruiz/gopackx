@@ -59,6 +59,9 @@ func NewTrialPacking(newEngine func() placement.Engine, opts ...TrialOption) *Tr
 // The bins parameter represents available bin types (templates); the solver
 // clones them as needed to create new bin instances.
 func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,

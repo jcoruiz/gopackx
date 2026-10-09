@@ -67,7 +67,13 @@ func WithEngine(newEngine func() placement.Engine) PackOption {
 //
 // Pack respects context deadlines and cancellation, returning the best solution
 // found so far when the context expires.
+//
+// Invalid input (see [model.Validate]) returns a nil result and an error
+// that wraps [model.ErrInvalidInput].
 func Pack(ctx context.Context, binTypes []*model.Bin, items []*model.Item, opts ...PackOption) (*model.Result, error) {
+	if err := model.Validate(binTypes, items); err != nil {
+		return nil, err
+	}
 	cfg := &packConfig{
 		newEngine: func() placement.Engine { return placement.NewPivotEngine() },
 	}
