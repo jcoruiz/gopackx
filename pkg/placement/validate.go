@@ -267,3 +267,38 @@ func overlapLen(pos1, len1, pos2, len2 float64) float64 {
 func fixPoint(bin *model.Bin, item *model.Item) {
 	fixPointDim(bin, item, item.Dimension())
 }
+
+// blockers remembers the last few items that blocked a candidate. Most
+// candidates collide with one of them, which is cheaper to test than every
+// item in the bin. A hit always means a real overlap, so skipping it never
+// rejects a valid spot.
+type blockers struct {
+	boxes [4][6]float64
+	n     int
+	next  int
+}
+
+// hit reports whether a box at pos with size dim overlaps a remembered
+// blocker, with the same tolerance as canPlaceDim.
+func (b *blockers) hit(pos, dim [3]float64) bool {
+	x1, y1, z1 := pos[0]+dim[0], pos[1]+dim[1], pos[2]+dim[2]
+	for i := range b.n {
+		o := &b.boxes[i]
+		if pos[0] < o[3]-epsilon && o[0] < x1-epsilon &&
+			pos[1] < o[4]-epsilon && o[1] < y1-epsilon &&
+			pos[2] < o[5]-epsilon && o[2] < z1-epsilon {
+			return true
+		}
+	}
+	return false
+}
+
+// add remembers the item at index idx of the bin as a blocker.
+func (b *blockers) add(bin *model.Bin, idx int) {
+	off := idx * 6
+	copy(b.boxes[b.next][:], bin.AABBData[off:off+6])
+	b.next = (b.next + 1) % len(b.boxes)
+	if b.n < len(b.boxes) {
+		b.n++
+	}
+}

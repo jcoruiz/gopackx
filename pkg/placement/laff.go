@@ -1,6 +1,7 @@
 package placement
 
 import (
+	"math"
 	"sort"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
@@ -9,6 +10,7 @@ import (
 
 // Verify interface compliance.
 var _ Engine = (*LAFFEngine)(nil)
+var _ Resetter = (*LAFFEngine)(nil)
 
 type laffLevel struct {
 	y      float64
@@ -21,6 +23,7 @@ type laffLevel struct {
 type LAFFEngine struct {
 	bin             *model.Bin
 	levels          []laffLevel
+	saved           binStates[[]laffLevel]
 	enableStability bool
 	supportRatio    float64
 	fast            bool // fast variant: 2D-only placement within levels
@@ -54,15 +57,16 @@ func NewLAFFEngine(opts ...LAFFOption) *LAFFEngine {
 // PlaceItem attempts to place an item within existing levels or by creating a new one.
 func (e *LAFFEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	if e.bin != bin {
-		e.initBin(bin)
+		e.switchBin(bin)
 	}
 
 	origRT := item.RotationType
 	origPos := item.Position
 
 	// Try existing levels (most recent first for locality).
+	var bl blockers
 	for i := len(e.levels) - 1; i >= 0; i-- {
-		if e.placeInLevel(bin, item, &e.levels[i]) {
+		if e.placeInLevel(bin, item, &e.levels[i], &bl) {
 			return true
 		}
 	}
@@ -77,39 +81,57 @@ func (e *LAFFEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	return false
 }
 
+// Reset forgets the state kept for every bin. Call it before reusing the
+// engine for an unrelated packing run; packer.Packer does it on each Pack.
+func (e *LAFFEngine) Reset() {
+	e.bin = nil
+	e.levels = nil
+	e.saved.reset()
+}
+
+// switchBin saves the levels of the current bin and restores those of bin,
+// rebuilding them only if this engine has not seen bin as it is now.
+func (e *LAFFEngine) switchBin(bin *model.Bin) {
+	if e.bin != nil {
+		e.saved.save(e.bin, e.levels)
+	}
+	if levels, ok := e.saved.load(bin); ok {
+		e.bin, e.levels = bin, levels
+		return
+	}
+	e.initBin(bin)
+}
+
+// initBin derives the levels of a bin from its items: one level per height
+// position, as tall as the tallest item starting there. Placing an item
+// updates the levels the same way (addLevel), so a bin this engine has not
+// packed itself gets the same levels as one it has.
 func (e *LAFFEngine) initBin(bin *model.Bin) {
 	e.bin = bin
 	e.levels = nil
+	for _, item := range bin.Items {
+		e.addLevel(item.Position[model.HeightAxis], item.PlacedDim[model.HeightAxis])
+	}
+}
 
-	if len(bin.Items) == 0 {
+// addLevel records an item of height h placed at height y.
+func (e *LAFFEngine) addLevel(y, h float64) {
+	i := sort.Search(len(e.levels), func(i int) bool { return e.levels[i].y >= y-epsilon })
+	if i < len(e.levels) && math.Abs(e.levels[i].y-y) <= epsilon {
+		e.levels[i].height = math.Max(e.levels[i].height, h)
 		return
 	}
-
-	// Rebuild levels from existing items grouped by Y position.
-	seen := make(map[float64]float64) // y → max height at that y
-	for _, item := range bin.Items {
-		y := item.Position[model.HeightAxis]
-		dim := item.Dimension()
-		h := dim[model.HeightAxis]
-		if cur, ok := seen[y]; !ok || h > cur {
-			seen[y] = h
-		}
-	}
-	e.levels = make([]laffLevel, 0, len(seen))
-	for y, h := range seen {
-		e.levels = append(e.levels, laffLevel{y: y, height: h})
-	}
-	sort.Slice(e.levels, func(i, j int) bool {
-		return e.levels[i].y < e.levels[j].y
-	})
+	e.levels = append(e.levels, laffLevel{})
+	copy(e.levels[i+1:], e.levels[i:])
+	e.levels[i] = laffLevel{y: y, height: h}
 }
 
 // tryNewLevel creates a new level with the item's best rotation (largest base area).
 func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
+	// A new level starts on top of everything placed so far.
 	newY := 0.0
-	if len(e.levels) > 0 {
-		last := e.levels[len(e.levels)-1]
-		newY = last.y + last.height
+	for _, lvl := range e.levels {
+		newY = math.Max(newY, lvl.y+lvl.height)
 	}
 
 	// Find rotation with largest base area that fits in remaining height.
@@ -136,7 +158,6 @@ func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
 	}
 
 	dims := rotation.DimensionsFor(item, bestRT)
-	lvl := laffLevel{y: newY, height: dims[1]}
 
 	item.RotationType = bestRT
 	item.Position = [3]float64{0, newY, 0}
@@ -153,12 +174,12 @@ func (e *LAFFEngine) tryNewLevel(bin *model.Bin, item *model.Item) bool {
 	}
 
 	bin.PlaceItem(item)
-	e.levels = append(e.levels, lvl)
+	e.addLevel(item.Position[model.HeightAxis], dims[1])
 	return true
 }
 
 // placeInLevel tries to place an item within a specific level.
-func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLevel) bool {
+func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLevel, bl *blockers) bool {
 	origRT := item.RotationType
 	origPos := item.Position
 
@@ -173,10 +194,16 @@ func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLev
 		}
 
 		for _, pos := range candidates {
+			if bl.hit(pos, dims) {
+				continue
+			}
 			item.RotationType = rt
 			item.Position = pos
 
-			if !canPlace(bin, item, e.enableStability, e.supportRatio) {
+			if k := canPlaceDimBlocker(bin, item, dims, e.enableStability, e.supportRatio); k != -1 {
+				if k >= 0 {
+					bl.add(bin, k)
+				}
 				continue
 			}
 
@@ -188,6 +215,7 @@ func (e *LAFFEngine) placeInLevel(bin *model.Bin, item *model.Item, lvl *laffLev
 			}
 
 			bin.PlaceItem(item)
+			e.addLevel(item.Position[model.HeightAxis], dims[1])
 			return true
 		}
 	}

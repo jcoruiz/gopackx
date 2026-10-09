@@ -120,6 +120,9 @@ func (bb *BranchBound) optimizeFast(ctx context.Context, origBin *model.Bin, ite
 			break
 		}
 
+		// A fresh engine per permutation: engines remember the bins they
+		// pack, and every permutation uses a new one.
+		engine := bb.newEngine()
 		binCopy := cloneBinEmpty(origBin)
 		itemsCopy := resetItems(items)
 		for _, idx := range indices {
@@ -165,14 +168,13 @@ func (bb *BranchBound) optimizeFull(ctx context.Context, origBin *model.Bin, ite
 	// DFS with backtracking.
 	used := make([]bool, n)
 	emptyBin := cloneBinEmpty(origBin)
-	bb.dfsFull(ctx, engine, emptyBin, items, used, 0, &best)
+	bb.dfsFull(ctx, emptyBin, items, used, 0, &best)
 
 	return best
 }
 
 func (bb *BranchBound) dfsFull(
 	ctx context.Context,
-	engine placement.Engine,
 	parentBin *model.Bin,
 	items []*model.Item,
 	used []bool,
@@ -204,7 +206,9 @@ func (bb *BranchBound) dfsFull(
 			itemCopy := resetItem(items[i])
 			itemCopy.AllowedRotations = []model.RotationType{rt}
 
-			if !engine.PlaceItem(binCopy, itemCopy) {
+			// Each node works on a new snapshot, so a fresh engine avoids
+			// keeping state for bins that are thrown away.
+			if !bb.newEngine().PlaceItem(binCopy, itemCopy) {
 				continue
 			}
 
@@ -218,7 +222,7 @@ func (bb *BranchBound) dfsFull(
 			}
 
 			if newDepth < len(items) {
-				bb.dfsFull(ctx, engine, binCopy, items, used, newDepth, best)
+				bb.dfsFull(ctx, binCopy, items, used, newDepth, best)
 			}
 
 			used[i] = false

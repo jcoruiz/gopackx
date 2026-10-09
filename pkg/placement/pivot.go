@@ -7,6 +7,7 @@ import (
 
 // Verify interface compliance.
 var _ Engine = (*PivotEngine)(nil)
+var _ Resetter = (*PivotEngine)(nil)
 
 // PivotEngine places items using pivot points generated from corners of placed items.
 type PivotEngine struct {
@@ -137,6 +138,9 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	item.Position = origPos
 	return false
 }
+
+// Reset is a no-op: the pivot engine keeps no per-bin state.
+func (e *PivotEngine) Reset() {}
 
 // generatePivots returns candidate positions from corners of placed items.
 func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {

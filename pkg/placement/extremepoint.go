@@ -9,6 +9,7 @@ import (
 
 // Verify interface compliance.
 var _ Engine = (*ExtremePointEngine)(nil)
+var _ Resetter = (*ExtremePointEngine)(nil)
 
 // ExtremePoint represents a candidate position with metadata about available space
 // and supporting surfaces.
@@ -22,10 +23,21 @@ type ExtremePoint struct {
 // It maintains a list of candidate positions with space and support metadata,
 // enabling fast rejection and better placement scoring than simple pivot points.
 type ExtremePointEngine struct {
-	points          []*ExtremePoint
-	bin             *model.Bin
+	points []*ExtremePoint
+	keys   map[[3]int64]struct{} // positions of points, to skip duplicates
+	bin    *model.Bin
+	// items are the bin's items the points are computed against: all of
+	// them while packing, the ones placed so far while rebuilding.
+	items           []*model.Item
+	saved           binStates[epState]
 	enableStability bool
 	supportRatio    float64
+}
+
+// epState is the per-bin state an ExtremePointEngine remembers.
+type epState struct {
+	points []*ExtremePoint
+	keys   map[[3]int64]struct{}
 }
 
 // ExtremePointOption configures the ExtremePointEngine.
@@ -53,7 +65,7 @@ func NewExtremePointEngine(opts ...ExtremePointOption) *ExtremePointEngine {
 // based on support, position, and fit quality.
 func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	if e.bin != bin {
-		e.initBin(bin)
+		e.switchBin(bin)
 	}
 
 	origRT := item.RotationType
@@ -74,6 +86,13 @@ func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				continue
 			}
 
+			// Scoring is cheap and does not depend on validity, so the full
+			// placement check only runs for points that could beat the best.
+			score := scorePlacement(ep, dims)
+			if score >= bestScore {
+				continue
+			}
+
 			item.RotationType = rt
 			item.Position = ep.Pos
 
@@ -81,12 +100,9 @@ func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 				continue
 			}
 
-			score := scorePlacement(ep, dims)
-			if score < bestScore {
-				bestScore = score
-				bestPoint = ep
-				bestRT = rt
-			}
+			bestScore = score
+			bestPoint = ep
+			bestRT = rt
 		}
 	}
 
@@ -108,6 +124,7 @@ func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 	bin.PlaceItem(item)
 
+	e.items = bin.Items
 	e.onItemPlaced(item)
 	return true
 }
@@ -121,19 +138,44 @@ func scorePlacement(ep *ExtremePoint, dims [3]float64) float64 {
 	return supportPenalty + positionScore + wasteScore
 }
 
+// Reset forgets the state kept for every bin. Call it before reusing the
+// engine for an unrelated packing run; packer.Packer does it on each Pack.
+func (e *ExtremePointEngine) Reset() {
+	e.bin = nil
+	e.points, e.keys, e.items = nil, nil, nil
+	e.saved.reset()
+}
+
+// switchBin saves the points of the current bin and restores those of bin,
+// rebuilding them only if this engine has not seen bin in its current state.
+func (e *ExtremePointEngine) switchBin(bin *model.Bin) {
+	if e.bin != nil {
+		e.saved.save(e.bin, epState{e.points, e.keys})
+	}
+	if st, ok := e.saved.load(bin); ok {
+		e.bin, e.items, e.points, e.keys = bin, bin.Items, st.points, st.keys
+		return
+	}
+	e.initBin(bin)
+}
+
 func (e *ExtremePointEngine) initBin(bin *model.Bin) {
 	e.bin = bin
-	e.points = make([]*ExtremePoint, 0, 8)
-	e.points = append(e.points, &ExtremePoint{
+	origin := &ExtremePoint{
 		Pos:      [3]float64{0, 0, 0},
 		MaxSpace: [3]float64{bin.Width, bin.Height, bin.Depth},
 		Support:  3,
-	})
+	}
+	e.points = []*ExtremePoint{origin}
+	e.keys = map[[3]int64]struct{}{pointKey(origin.Pos): {}}
 
-	// Rebuild points from items already in the bin.
-	for _, item := range bin.Items {
+	// Rebuild points from items already in the bin, replaying them in order
+	// so the result is the same as if this engine had placed them.
+	for k, item := range bin.Items {
+		e.items = bin.Items[:k+1]
 		e.onItemPlaced(item)
 	}
+	e.items = bin.Items
 }
 
 func (e *ExtremePointEngine) onItemPlaced(item *model.Item) {
@@ -168,7 +210,8 @@ func (e *ExtremePointEngine) removePointsInside(item *model.Item, dim [3]float64
 			ep.Pos[1] < item.Position[1]+dim[1]-epsilon &&
 			ep.Pos[2] > item.Position[2]+epsilon &&
 			ep.Pos[2] < item.Position[2]+dim[2]-epsilon {
-			continue // strictly inside, remove
+			delete(e.keys, pointKey(ep.Pos)) // strictly inside, remove
+			continue
 		}
 		e.points[n] = ep
 		n++
@@ -190,11 +233,11 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 	)
 
 	// Interaction points: where existing items' faces intersect with the new item.
-	for _, placed := range e.bin.Items {
+	for _, placed := range e.items {
 		if placed == item {
 			continue
 		}
-		pd := placed.Dimension()
+		pd := placed.PlacedDim
 		pp := placed.Position
 
 		// Existing item's right face cuts through new item's X range.
@@ -259,14 +302,16 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 			continue
 		}
 
+		key := pointKey(pos)
+		if _, dup := e.keys[key]; dup {
+			continue
+		}
+
 		if e.isInsideAnyItem(pos) {
 			continue
 		}
 
-		if e.isDuplicate(pos) {
-			continue
-		}
-
+		e.keys[key] = struct{}{}
 		e.points = append(e.points, &ExtremePoint{
 			Pos:     pos,
 			Support: e.countSupport(pos),
@@ -281,8 +326,8 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 	}
 
 	bestY := 0.0
-	for _, item := range e.bin.Items {
-		dim := item.Dimension()
+	for _, item := range e.items {
+		dim := item.PlacedDim
 		itemTop := item.Position[1] + dim[1]
 
 		if pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
@@ -297,8 +342,8 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 }
 
 func (e *ExtremePointEngine) isInsideAnyItem(pos [3]float64) bool {
-	for _, item := range e.bin.Items {
-		dim := item.Dimension()
+	for _, item := range e.items {
+		dim := item.PlacedDim
 		if pos[0] > item.Position[0]+epsilon &&
 			pos[0] < item.Position[0]+dim[0]-epsilon &&
 			pos[1] > item.Position[1]+epsilon &&
@@ -311,15 +356,13 @@ func (e *ExtremePointEngine) isInsideAnyItem(pos [3]float64) bool {
 	return false
 }
 
-func (e *ExtremePointEngine) isDuplicate(pos [3]float64) bool {
-	for _, ep := range e.points {
-		if math.Abs(ep.Pos[0]-pos[0]) < epsilon &&
-			math.Abs(ep.Pos[1]-pos[1]) < epsilon &&
-			math.Abs(ep.Pos[2]-pos[2]) < epsilon {
-			return true
-		}
+// pointKey snaps a position to the epsilon grid that tells points apart.
+func pointKey(p [3]float64) [3]int64 {
+	return [3]int64{
+		int64(math.Round(p[0] / epsilon)),
+		int64(math.Round(p[1] / epsilon)),
+		int64(math.Round(p[2] / epsilon)),
 	}
-	return false
 }
 
 // countSupport counts how many planes (XY=floor, XZ=side wall, YZ=front wall)
@@ -331,8 +374,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[1] < epsilon {
 		support++
 	} else {
-		for _, item := range e.bin.Items {
-			dim := item.Dimension()
+		for _, item := range e.items {
+			dim := item.PlacedDim
 			itemTop := item.Position[1] + dim[1]
 			if math.Abs(pos[1]-itemTop) < epsilon &&
 				pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
@@ -347,8 +390,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[0] < epsilon {
 		support++
 	} else {
-		for _, item := range e.bin.Items {
-			dim := item.Dimension()
+		for _, item := range e.items {
+			dim := item.PlacedDim
 			itemRight := item.Position[0] + dim[0]
 			if math.Abs(pos[0]-itemRight) < epsilon &&
 				pos[1] >= item.Position[1]-epsilon && pos[1] < item.Position[1]+dim[1]+epsilon &&
@@ -363,8 +406,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[2] < epsilon {
 		support++
 	} else {
-		for _, item := range e.bin.Items {
-			dim := item.Dimension()
+		for _, item := range e.items {
+			dim := item.PlacedDim
 			itemBack := item.Position[2] + dim[2]
 			if math.Abs(pos[2]-itemBack) < epsilon &&
 				pos[0] >= item.Position[0]-epsilon && pos[0] < item.Position[0]+dim[0]+epsilon &&
@@ -424,6 +467,8 @@ func (e *ExtremePointEngine) removeZeroSpacePoints() {
 		if ep.MaxSpace[0] > epsilon && ep.MaxSpace[1] > epsilon && ep.MaxSpace[2] > epsilon {
 			e.points[n] = ep
 			n++
+		} else {
+			delete(e.keys, pointKey(ep.Pos))
 		}
 	}
 	e.points = e.points[:n]
@@ -438,8 +483,8 @@ func (e *ExtremePointEngine) calculateMaxSpace(ep *ExtremePoint) {
 		e.bin.Depth - ep.Pos[2],
 	}
 
-	for _, item := range e.bin.Items {
-		dim := item.Dimension()
+	for _, item := range e.items {
+		dim := item.PlacedDim
 		ip := item.Position
 
 		// Width: item to the right, point within item's Y-Z cross-section.

@@ -2362,12 +2362,10 @@ func TestCoverage_DfsFull_Direct_CtxCancel(t *testing.T) {
 	used := make([]bool, 2)
 	best := &singleBinResult{bin: bin, count: 0}
 
-	engine := bb.newEngine()
-
 	// Cancel context before DFS.
 	cancel()
 
-	bb.dfsFull(ctx, engine, bin, items, used, 0, best)
+	bb.dfsFull(ctx, bin, items, used, 0, best)
 	// Should return immediately due to ctx cancel, without placing anything.
 	if best.count != 0 {
 		t.Errorf("best.count = %d, want 0 after cancelled context", best.count)
@@ -2391,9 +2389,7 @@ func TestCoverage_DfsFull_Direct_CountPruning(t *testing.T) {
 	// depth+remaining = 3 <= best.count = 3 -> prune.
 	best := &singleBinResult{bin: bin, count: 3}
 
-	engine := bb.newEngine()
-
-	bb.dfsFull(context.Background(), engine, bin, items, used, 0, best)
+	bb.dfsFull(context.Background(), bin, items, used, 0, best)
 	// Should prune immediately since we can't beat best.count=3 with depth+remaining=3.
 	if best.count != 3 {
 		t.Errorf("best.count = %d, want 3 (unchanged after pruning)", best.count)
@@ -2418,9 +2414,7 @@ func TestCoverage_DfsFull_Direct_OptimalEarlyReturn(t *testing.T) {
 	used := make([]bool, 2)
 	best := &singleBinResult{bin: bin, count: 0}
 
-	engine := bb.newEngine()
-
-	bb.dfsFull(context.Background(), engine, bin, items, used, 0, best)
+	bb.dfsFull(context.Background(), bin, items, used, 0, best)
 	// Should find optimal (2) and return via the early return path.
 	if best.count != 2 {
 		t.Errorf("expected optimal count=2, got %d", best.count)

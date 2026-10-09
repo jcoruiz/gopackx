@@ -65,6 +65,11 @@ func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 		}, nil
 	}
 
+	// Engines remember the bins they pack; start each run from scratch.
+	if r, ok := p.engine.(placement.Resetter); ok {
+		r.Reset()
+	}
+
 	// Copy the item slice for sorting (items themselves are shared).
 	items := make([]*model.Item, len(p.items))
 	copy(items, p.items)

@@ -9,6 +9,7 @@ import (
 
 // Verify interface compliance.
 var _ Engine = (*MaxRectsEngine)(nil)
+var _ Resetter = (*MaxRectsEngine)(nil)
 
 // freeSpace represents a maximal free cuboid within the bin.
 type freeSpace struct {
@@ -21,6 +22,7 @@ type freeSpace struct {
 type MaxRectsEngine struct {
 	spaces          []freeSpace
 	bin             *model.Bin
+	saved           binStates[[]freeSpace]
 	enableStability bool
 	supportRatio    float64
 }
@@ -45,9 +47,31 @@ func NewMaxRectsEngine(opts ...MaxRectsOption) *MaxRectsEngine {
 	return e
 }
 
+// Reset forgets the state kept for every bin. Call it before reusing the
+// engine for an unrelated packing run; packer.Packer does it on each Pack.
+func (e *MaxRectsEngine) Reset() {
+	e.bin = nil
+	e.spaces = nil
+	e.saved.reset()
+}
+
+// switchBin saves the free spaces of the current bin and restores those of
+// bin, rebuilding them only if this engine has not seen bin as it is now.
+func (e *MaxRectsEngine) switchBin(bin *model.Bin) {
+	if e.bin != nil {
+		e.saved.save(e.bin, e.spaces)
+	}
+	if spaces, ok := e.saved.load(bin); ok {
+		e.bin, e.spaces = bin, spaces
+		return
+	}
+	e.initBin(bin)
+}
+
 func (e *MaxRectsEngine) initBin(bin *model.Bin) {
 	e.bin = bin
-	e.spaces = e.spaces[:0]
+	// A new slice: the previous one may be saved for another bin.
+	e.spaces = make([]freeSpace, 0, 16)
 	e.spaces = append(e.spaces, freeSpace{
 		x: 0, y: 0, z: 0,
 		w: bin.Width, h: bin.Height, d: bin.Depth,
@@ -63,7 +87,7 @@ func (e *MaxRectsEngine) initBin(bin *model.Bin) {
 // full placement check (overlap, fragile items, load limits, stability).
 func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	if e.bin != bin {
-		e.initBin(bin)
+		e.switchBin(bin)
 	}
 
 	// Weight check.
