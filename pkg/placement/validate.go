@@ -32,7 +32,7 @@ func canPlaceDim(bin *model.Bin, item *model.Item, dim [3]float64, enableStabili
 	}
 
 	// Weight capacity.
-	if item.Weight > bin.MaxWeight-bin.ItemWeight+epsilon {
+	if !bin.CanCarry(item.Weight) {
 		return false
 	}
 
@@ -143,7 +143,7 @@ func canPlaceDimBlocker(bin *model.Bin, item *model.Item, dim [3]float64, enable
 	if iPos[0] < -epsilon || iPos[1] < -epsilon || iPos[2] < -epsilon {
 		return -2
 	}
-	if item.Weight > bin.MaxWeight-bin.ItemWeight+epsilon {
+	if !bin.CanCarry(item.Weight) {
 		return -2
 	}
 

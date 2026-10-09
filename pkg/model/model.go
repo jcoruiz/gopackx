@@ -1,7 +1,10 @@
 // Package model defines the core data types for 3D bin packing.
 package model
 
-import "slices"
+import (
+	"math"
+	"slices"
+)
 
 // Axis represents a spatial axis.
 type Axis int
@@ -190,6 +193,7 @@ func BinCost(cost float64) BinOption {
 }
 
 // NewBin creates a new Bin with precalculated volume.
+// A maxWeight of 0 means the bin has no weight limit.
 func NewBin(id string, w, h, d, maxWeight float64, opts ...BinOption) *Bin {
 	b := &Bin{
 		ID:        id,
@@ -270,9 +274,33 @@ func (b *Bin) TotalWeight() float64 {
 	return b.ItemWeight
 }
 
-// RemainingWeight returns how much weight capacity is left.
+// weightTolerance absorbs floating point error in weight sums.
+const weightTolerance = 1e-6
+
+// HasWeightLimit reports whether the bin limits the weight it carries.
+// A MaxWeight of 0 means no limit.
+func (b *Bin) HasWeightLimit() bool {
+	return b.MaxWeight > 0
+}
+
+// RemainingWeight returns how much weight capacity is left, or +Inf if the
+// bin has no weight limit.
 func (b *Bin) RemainingWeight() float64 {
+	if !b.HasWeightLimit() {
+		return math.Inf(1)
+	}
 	return b.MaxWeight - b.ItemWeight
+}
+
+// AllowsWeight reports whether the bin can carry a total weight of w.
+func (b *Bin) AllowsWeight(w float64) bool {
+	return !b.HasWeightLimit() || w <= b.MaxWeight+weightTolerance
+}
+
+// CanCarry reports whether an item of weight w fits within the bin's
+// remaining weight capacity.
+func (b *Bin) CanCarry(w float64) bool {
+	return b.AllowsWeight(b.ItemWeight + w)
 }
 
 // UsedVolume returns the sum of volumes of all placed items.

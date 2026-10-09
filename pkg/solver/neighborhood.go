@@ -252,7 +252,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 				continue
 			}
 			// Quick weight check.
-			if binFillWeight(sol, b, items)+item.Weight > bt.MaxWeight {
+			if !bt.AllowsWeight(binFillWeight(sol, b, items) + item.Weight) {
 				continue
 			}
 
@@ -308,7 +308,7 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *r
 			// Weight check after swap.
 			w1 := binFillWeight(sol, p1.binIdx, items) - i1.Weight + i2.Weight
 			w2 := binFillWeight(sol, p2.binIdx, items) - i2.Weight + i1.Weight
-			if w1 > bt1.MaxWeight || w2 > bt2.MaxWeight {
+			if !bt1.AllowsWeight(w1) || !bt2.AllowsWeight(w2) {
 				continue
 			}
 
@@ -434,7 +434,7 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 				if binFillVolume(newSol, b, items)+item.Volume > bt.Volume {
 					continue
 				}
-				if binFillWeight(newSol, b, items)+item.Weight > bt.MaxWeight {
+				if !bt.AllowsWeight(binFillWeight(newSol, b, items) + item.Weight) {
 					continue
 				}
 
@@ -509,7 +509,7 @@ func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin, 
 			// Quick checks.
 			fillVol := binFillVolume(sol, b, items)
 			fillWeight := binFillWeight(sol, b, items)
-			if fillVol > bt.Volume || fillWeight > bt.MaxWeight {
+			if fillVol > bt.Volume || !bt.AllowsWeight(fillWeight) {
 				continue
 			}
 			// Check that each item's smallest dimension fits.

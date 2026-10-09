@@ -245,14 +245,17 @@ func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*mo
 	leftoverVol := totalVol - packedVol
 	leftoverWeight := totalWeight // conservative: ignore weight packed
 
-	// Find the largest bin type for the lower bound.
+	// Find the largest bin type for the lower bound. A type without a
+	// weight limit means weight gives no bound.
 	maxBinVol := 0.0
 	maxBinWeight := 0.0
 	for _, bt := range binTypes {
 		if bt.Volume > maxBinVol {
 			maxBinVol = bt.Volume
 		}
-		if bt.MaxWeight > maxBinWeight {
+		if !bt.HasWeightLimit() {
+			maxBinWeight = math.Inf(1)
+		} else if bt.MaxWeight > maxBinWeight {
 			maxBinWeight = bt.MaxWeight
 		}
 	}
@@ -262,7 +265,7 @@ func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*mo
 		volBound = math.Ceil(leftoverVol / maxBinVol)
 	}
 	weightBound := 0.0
-	if maxBinWeight > 0 {
+	if maxBinWeight > 0 && !math.IsInf(maxBinWeight, 1) {
 		weightBound = math.Ceil(leftoverWeight / maxBinWeight)
 	}
 

@@ -208,3 +208,35 @@ func TestEntryPointsAreDeterministic(t *testing.T) {
 		})
 	}
 }
+
+// A MaxWeight of 0 used to mean that a box could hold nothing, silently
+// leaving every item unfitted. It now means no weight limit.
+func TestEntryPointsTreatZeroMaxWeightAsNoLimit(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{model.NewBin("free", 30, 30, 30, 0), model.NewBin("limited", 30, 30, 30, 100)}
+			items := []*model.Item{
+				model.NewItem("anvil", 20, 20, 20, 500),
+				model.NewItem("feather", 5, 5, 5, 1),
+			}
+			res, err := ep.run(context.Background(), bins, items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Stats.FittedItems != 2 {
+				t.Fatalf("fitted %d of 2 items, want both", res.Stats.FittedItems)
+			}
+			for _, b := range res.Bins {
+				for _, it := range b.Items {
+					if it.ID == "anvil" && b.HasWeightLimit() {
+						t.Errorf("the 500 kg anvil went into %s, which holds 100 kg", b.ID)
+					}
+				}
+			}
+			// Weight use only counts boxes with a limit.
+			if res.Stats.WeightUsedPct < 0 || res.Stats.WeightUsedPct > 100 {
+				t.Errorf("WeightUsedPct = %v", res.Stats.WeightUsedPct)
+			}
+		})
+	}
+}

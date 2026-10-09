@@ -91,7 +91,7 @@ func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	}
 
 	// Weight check.
-	if item.Weight > bin.MaxWeight-bin.ItemWeight+epsilon {
+	if !bin.CanCarry(item.Weight) {
 		return false
 	}
 

@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestNewItem(t *testing.T) {
 	item := NewItem("test", 10, 20, 30, 5.0)
@@ -251,5 +254,26 @@ func TestBinCloneAndCloneEmpty(t *testing.T) {
 	e := b.CloneEmpty()
 	if len(e.Items) != 0 || e.TotalWeight() != 0 || e.Cost != 3 || e.Width != 10 {
 		t.Errorf("CloneEmpty = %+v", e)
+	}
+}
+
+func TestWeightLimit(t *testing.T) {
+	limited := NewBin("limited", 10, 10, 10, 5)
+	limited.PlaceItem(NewItem("a", 1, 1, 1, 3))
+	if !limited.HasWeightLimit() || limited.RemainingWeight() != 2 {
+		t.Errorf("limited: HasWeightLimit=%v RemainingWeight=%v", limited.HasWeightLimit(), limited.RemainingWeight())
+	}
+	if !limited.CanCarry(2) || limited.CanCarry(2.1) {
+		t.Error("limited bin should carry 2 more kg and not 2.1")
+	}
+
+	// A MaxWeight of 0 means no limit, like Cost and LoadBear.
+	free := NewBin("free", 10, 10, 10, 0)
+	free.PlaceItem(NewItem("a", 1, 1, 1, 1e6))
+	if free.HasWeightLimit() || !math.IsInf(free.RemainingWeight(), 1) {
+		t.Errorf("free: HasWeightLimit=%v RemainingWeight=%v", free.HasWeightLimit(), free.RemainingWeight())
+	}
+	if !free.CanCarry(1e9) || !free.AllowsWeight(1e12) {
+		t.Error("a bin without a weight limit should carry anything")
 	}
 }
