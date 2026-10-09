@@ -3,10 +3,13 @@ package packer_test
 import (
 	"context"
 	"math"
+	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/packer"
+	"github.com/jcoruiz/gopackx/pkg/placement"
 )
 
 // weightOnTop returns the weight resting directly on top of item a, each
@@ -78,5 +81,83 @@ func TestLoadLimitedItemNotSlidUnderOverhang(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func layout(r *model.Result) [][]string {
+	var out [][]string
+	for _, b := range r.Bins {
+		var ids []string
+		for _, it := range b.Items {
+			ids = append(ids, it.ID+"@"+strconv.FormatFloat(it.Position[0], 'g', -1, 64)+","+
+				strconv.FormatFloat(it.Position[1], 'g', -1, 64)+","+strconv.FormatFloat(it.Position[2], 'g', -1, 64))
+		}
+		out = append(out, ids)
+	}
+	return out
+}
+
+// Pack used to fill the added bins in place: a second call appended the
+// items again (6 items in a bin, stats saying 3) and the caller's items
+// came back modified.
+func TestPackIsRepeatableAndLeavesInputsUntouched(t *testing.T) {
+	bin := model.NewBin("b", 30, 30, 30, 100)
+	items := []*model.Item{
+		model.NewItem("0", 10, 10, 10, 1),
+		model.NewItem("1", 20, 10, 10, 1),
+		model.NewItem("2", 10, 20, 10, 1),
+	}
+	p := packer.NewPacker(packer.WithPlacementEngine(placement.NewExtremePointEngine()))
+	p.AddBin(bin)
+	for _, it := range items {
+		p.AddItem(it)
+	}
+
+	first, err := p.Pack(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := p.Pack(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(layout(first), layout(second)) {
+		t.Errorf("second Pack differs:\n%v\n%v", layout(first), layout(second))
+	}
+	if n := len(second.Bins[0].Items); n != second.Stats.FittedItems || n != 3 {
+		t.Errorf("bin holds %d items, stats say %d, want 3", n, second.Stats.FittedItems)
+	}
+	if len(bin.Items) != 0 || bin.TotalWeight() != 0 {
+		t.Error("the added bin was modified")
+	}
+	for _, it := range items {
+		if it.Placed || it.Position != [3]float64{} {
+			t.Errorf("item %s was modified", it.ID)
+		}
+	}
+}
+
+// Items already placed in an added bin are kept, in every run.
+func TestPackKeepsItemsAlreadyInABin(t *testing.T) {
+	bin := model.NewBin("b", 20, 10, 10, 100)
+	pre := model.NewItem("pre", 10, 10, 10, 1)
+	pre.Position = [3]float64{0, 0, 0}
+	bin.PlaceItem(pre)
+
+	p := packer.NewPacker()
+	p.AddBin(bin)
+	p.AddItem(model.NewItem("new", 10, 10, 10, 1))
+	for range 2 {
+		r, err := p.Pack(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := r.Bins[0].Items
+		if len(got) != 2 || got[0].ID != "pre" || got[1].Position[0] != 10 {
+			t.Fatalf("bin holds %v, want pre at x=0 and new at x=10", layout(r))
+		}
+	}
+	if len(bin.Items) != 1 {
+		t.Error("the added bin was modified")
 	}
 }

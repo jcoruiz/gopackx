@@ -206,3 +206,50 @@ func TestBinWeightAndVolume(t *testing.T) {
 		t.Errorf("VolumeUsedPct = %f, want 12.5", bin.VolumeUsedPct())
 	}
 }
+
+func TestItemCloneAndResetPlacement(t *testing.T) {
+	it := NewItem("a", 1, 2, 3, 4, ItemUpright())
+	it.Position = [3]float64{5, 6, 7}
+	it.RotationType = RotationDHW
+	it.Placed = true
+
+	c := it.Clone()
+	c.AllowedRotations[0] = RotationHDW
+	if it.AllowedRotations[0] != RotationWHD {
+		t.Error("Clone shares AllowedRotations with the original")
+	}
+	if c.Position != it.Position || !c.Placed {
+		t.Error("Clone should keep the placement")
+	}
+
+	c.ResetPlacement()
+	if c.Placed || c.Position != [3]float64{} || c.RotationType != RotationWHD {
+		t.Errorf("ResetPlacement left %+v", c)
+	}
+	if !it.Placed {
+		t.Error("ResetPlacement changed the original")
+	}
+}
+
+func TestBinCloneAndCloneEmpty(t *testing.T) {
+	b := NewBin("b", 10, 10, 10, 50, BinCost(3))
+	it := NewItem("glass", 2, 2, 2, 1, ItemFragile())
+	b.PlaceItem(it)
+
+	c := b.Clone()
+	if len(c.Items) != 1 || c.Items[0] == it || c.Items[0].ID != "glass" {
+		t.Fatal("Clone should hold a copy of the placed item")
+	}
+	if c.TotalWeight() != 1 || !c.HasFragile {
+		t.Error("Clone lost the tracked weight or fragile index")
+	}
+	c.RemoveLastItem()
+	if len(b.Items) != 1 || b.TotalWeight() != 1 {
+		t.Error("changing the clone changed the original")
+	}
+
+	e := b.CloneEmpty()
+	if len(e.Items) != 0 || e.TotalWeight() != 0 || e.Cost != 3 || e.Width != 10 {
+		t.Errorf("CloneEmpty = %+v", e)
+	}
+}

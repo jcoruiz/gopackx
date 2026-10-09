@@ -1,6 +1,8 @@
 // Package model defines the core data types for 3D bin packing.
 package model
 
+import "slices"
+
 // Axis represents a spatial axis.
 type Axis int
 
@@ -134,6 +136,22 @@ func ItemAllowedRotations(rots []RotationType) ItemOption {
 	}
 }
 
+// Clone returns a deep copy of the item, placement included.
+func (it *Item) Clone() *Item {
+	c := *it
+	c.AllowedRotations = slices.Clone(it.AllowedRotations)
+	return &c
+}
+
+// ResetPlacement clears the placement of the item: position, rotation and
+// the Placed flag.
+func (it *Item) ResetPlacement() {
+	it.Placed = false
+	it.Position = [3]float64{}
+	it.RotationType = RotationWHD
+	it.PlacedDim = [3]float64{}
+}
+
 // Dimension returns the effective [w, h, d] after applying the current rotation.
 func (it *Item) Dimension() [3]float64 {
 	dims := [3]float64{it.Width, it.Height, it.Depth}
@@ -185,6 +203,32 @@ func NewBin(id string, w, h, d, maxWeight float64, opts ...BinOption) *Bin {
 		opt(b)
 	}
 	return b
+}
+
+// CloneEmpty returns a bin with the same configuration and no items.
+func (b *Bin) CloneEmpty() *Bin {
+	c := *b
+	c.Items = nil
+	c.UnfittedItems = nil
+	c.AABBData = nil
+	c.HasFragile = false
+	c.FragileIdxs = nil
+	c.ItemWeight = 0
+	c.ItemVolume = 0
+	return &c
+}
+
+// Clone returns a deep copy of the bin, with copies of the items placed in it.
+func (b *Bin) Clone() *Bin {
+	c := *b
+	c.Items = make([]*Item, len(b.Items))
+	for i, it := range b.Items {
+		c.Items[i] = it.Clone()
+	}
+	c.UnfittedItems = nil
+	c.AABBData = slices.Clone(b.AABBData)
+	c.FragileIdxs = slices.Clone(b.FragileIdxs)
+	return &c
 }
 
 // PlaceItem adds an item to the bin and updates tracked weight/volume.

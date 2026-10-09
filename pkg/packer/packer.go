@@ -55,16 +55,29 @@ func (p *Packer) AddItem(item *model.Item) {
 	p.items = append(p.items, item)
 }
 
-// Pack runs the packing algorithm and returns the result.
+// Pack runs the packing algorithm and returns the result. It packs copies
+// of the bins and items that were added, which stay unchanged, so calling
+// Pack again gives the same result.
 func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 	if err := model.Validate(p.bins, p.items); err != nil {
 		return nil, err
 	}
-	if len(p.bins) == 0 || len(p.items) == 0 {
+	// Pack copies: the bins and items that were added stay as they are, and
+	// calling Pack again starts from them again.
+	bins := make([]*model.Bin, len(p.bins))
+	for i, b := range p.bins {
+		bins[i] = b.Clone()
+	}
+	items := make([]*model.Item, len(p.items))
+	for i, it := range p.items {
+		items[i] = it.Clone()
+		items[i].ResetPlacement()
+	}
+	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
-			Bins:          p.bins,
-			UnfittedItems: p.items,
-			Stats:         computeStats(p.bins, p.items, p.items),
+			Bins:          bins,
+			UnfittedItems: items,
+			Stats:         computeStats(bins, items, items),
 		}, nil
 	}
 
@@ -73,17 +86,14 @@ func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 		r.Reset()
 	}
 
-	// Copy the item slice for sorting (items themselves are shared).
-	items := make([]*model.Item, len(p.items))
-	copy(items, p.items)
 	strategy.SortItems(items, p.strategy)
 
 	var unfitted []*model.Item
 
 	if p.strategy == strategy.NextFit {
-		unfitted = p.packNextFit(ctx, items)
+		unfitted = p.packNextFit(ctx, bins, items)
 	} else {
-		unfitted = p.packStandard(ctx, items)
+		unfitted = p.packStandard(ctx, bins, items)
 	}
 
 	if ctx.Err() != nil {
@@ -91,14 +101,14 @@ func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 	}
 
 	result := &model.Result{
-		Bins:          p.bins,
+		Bins:          bins,
 		UnfittedItems: unfitted,
-		Stats:         computeStats(p.bins, items, unfitted),
+		Stats:         computeStats(bins, items, unfitted),
 	}
 	return result, nil
 }
 
-func (p *Packer) packStandard(ctx context.Context, items []*model.Item) []*model.Item {
+func (p *Packer) packStandard(ctx context.Context, bins []*model.Bin, items []*model.Item) []*model.Item {
 	var unfitted []*model.Item
 
 	for _, item := range items {
@@ -108,7 +118,7 @@ func (p *Packer) packStandard(ctx context.Context, items []*model.Item) []*model
 		}
 
 		placed := false
-		candidates := strategy.SortBinsForItem(p.bins, item, p.strategy)
+		candidates := strategy.SortBinsForItem(bins, item, p.strategy)
 		for _, bin := range candidates {
 			if p.engine.PlaceItem(bin, item) {
 				placed = true
@@ -122,7 +132,7 @@ func (p *Packer) packStandard(ctx context.Context, items []*model.Item) []*model
 	return unfitted
 }
 
-func (p *Packer) packNextFit(ctx context.Context, items []*model.Item) []*model.Item {
+func (p *Packer) packNextFit(ctx context.Context, bins []*model.Bin, items []*model.Item) []*model.Item {
 	var unfitted []*model.Item
 	binIdx := 0
 
@@ -133,8 +143,8 @@ func (p *Packer) packNextFit(ctx context.Context, items []*model.Item) []*model.
 		}
 
 		placed := false
-		for binIdx < len(p.bins) {
-			if p.engine.PlaceItem(p.bins[binIdx], item) {
+		for binIdx < len(bins) {
+			if p.engine.PlaceItem(bins[binIdx], item) {
 				placed = true
 				break
 			}
