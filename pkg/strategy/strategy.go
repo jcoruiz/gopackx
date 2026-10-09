@@ -56,7 +56,7 @@ func SortItems(items []*model.Item, st Type) {
 func SortBinsForItem(bins []*model.Bin, item *model.Item, st Type) []*model.Bin {
 	candidates := make([]*model.Bin, 0, len(bins))
 	for _, bin := range bins {
-		if bin.RemainingWeight() >= item.Weight {
+		if bin.CanCarry(item.Weight) {
 			candidates = append(candidates, bin)
 		}
 	}

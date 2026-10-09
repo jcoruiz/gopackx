@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/strategy"
@@ -59,6 +60,9 @@ func defaultConfigs() []ParallelConfig {
 
 // Solve runs all configurations concurrently and returns the best result.
 func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(p.configs) == 0 || len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,
@@ -67,52 +71,42 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 		}, nil
 	}
 
-	type entry struct {
-		res *model.Result
-	}
-
-	results := make(chan entry, len(p.configs))
+	// One slot per configuration: the winner is chosen in configuration
+	// order, so ties do not depend on which goroutine finishes first.
+	results := make([]*model.Result, len(p.configs))
+	errs := make([]error, len(p.configs))
 	var wg sync.WaitGroup
 
-	for _, cfg := range p.configs {
+	for i, cfg := range p.configs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			// Deep copy bins and items for this goroutine.
 			binsCopy := make([]*model.Bin, len(bins))
-			for i, b := range bins {
-				binsCopy[i] = cloneBinEmpty(b)
+			for j, b := range bins {
+				binsCopy[j] = cloneBinEmpty(b)
 			}
 			itemsCopy := resetItems(items)
 
 			engine := cfg.NewEngine()
-			res := packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
-			results <- entry{res}
+			results[i], errs[i] = packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
 		}()
 	}
+	wg.Wait()
 
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
+	// If the context ended, some configurations stopped early: report it.
 	var best *model.Result
-	for r := range results {
-		if isBetter(r.res, best) {
-			best = r.res
+	var stopped error
+	for i, res := range results {
+		if errs[i] != nil {
+			stopped = errs[i]
+		}
+		if isBetter(res, best) {
+			best = res
 		}
 	}
-
-	if best == nil {
-		return &model.Result{
-			Bins:          bins,
-			UnfittedItems: items,
-			Stats:         computeStats(bins, items, items),
-		}, ctx.Err()
-	}
-
-	return best, nil
+	return best, stopped
 }
 
 func isBetter(a, b *model.Result) bool {
@@ -126,14 +120,16 @@ func isBetter(a, b *model.Result) bool {
 }
 
 // packGreedy packs items into bins using the given engine and strategy.
-func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin, items []*model.Item, st strategy.Type) *model.Result {
+// It stops early, with the remaining items unfitted, when the context ends.
+func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin, items []*model.Item, st strategy.Type) (*model.Result, error) {
 	strategy.SortItems(items, st)
 
 	var unfitted []*model.Item
-	for _, item := range items {
-		if ctx.Err() != nil {
-			unfitted = append(unfitted, item)
-			continue
+	var stopped error
+	for i, item := range items {
+		if stopped = deadline.Err(ctx); stopped != nil {
+			unfitted = append(unfitted, items[i:]...)
+			break
 		}
 
 		placed := false
@@ -153,5 +149,5 @@ func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin,
 		Bins:          bins,
 		UnfittedItems: unfitted,
 		Stats:         computeStats(bins, items, unfitted),
-	}
+	}, stopped
 }

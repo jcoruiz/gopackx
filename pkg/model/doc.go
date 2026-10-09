@@ -46,13 +46,25 @@
 // # Bins
 //
 // A [Bin] represents a container with fixed width, height, depth, and maximum
-// weight capacity. Create bins with [NewBin]:
+// weight capacity (0 means no limit). Create bins with [NewBin]:
 //
 //	bin := model.NewBin("container-1", 100, 100, 100, 500)
 //
 // After packing, [Bin.Items] holds the successfully placed items and helper methods
 // such as [Bin.TotalWeight], [Bin.RemainingWeight], [Bin.UsedVolume], and
-// [Bin.VolumeUsedPct] provide utilization metrics.
+// [Bin.VolumeUsedPct] provide utilization metrics. [Bin.Load] returns the weight
+// stacked on each item, and [Bin.Box], [Bin.Collides], [Bin.RestsOnFragile] and
+// [Bin.HasItemOnTop] answer geometric questions about a candidate placement.
+// Bins that solvers open from a box type record it in [Bin.TypeID].
+//
+// Change a bin's items only with [Bin.PlaceItem] and [Bin.RemoveLastItem], which
+// keep the tracked weight, positions and loads in sync.
+//
+// # Validation
+//
+// [Validate] checks bins and items before packing: finite, positive sizes and
+// finite, non-negative weights, limits and costs. Every packing entry point
+// calls it and returns an error wrapping [ErrInvalidInput] for bad input.
 //
 // # Results
 //

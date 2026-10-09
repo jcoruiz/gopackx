@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/rotation"
@@ -46,6 +47,9 @@ func NewBranchBound(newEngine func() placement.Engine, opts ...BBOption) *Branch
 
 // Solve processes bins sequentially, using B&B to maximize items in each bin.
 func (bb *BranchBound) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,
@@ -57,27 +61,36 @@ func (bb *BranchBound) Solve(ctx context.Context, bins []*model.Bin, items []*mo
 	remaining := resetItems(items)
 	resultBins := make([]*model.Bin, 0, len(bins))
 
+	var stopped error
 	for _, bin := range bins {
-		if ctx.Err() != nil || len(remaining) == 0 {
+		if len(remaining) == 0 {
+			break
+		}
+		if stopped = deadline.Err(ctx); stopped != nil {
 			break
 		}
 
 		best := bb.optimizeSingleBin(ctx, bin, remaining)
 		resultBins = append(resultBins, best.bin)
 		remaining = best.unfitted
+		if best.stopped != nil {
+			stopped = best.stopped
+			break
+		}
 	}
 
 	return &model.Result{
 		Bins:          resultBins,
 		UnfittedItems: remaining,
 		Stats:         computeStats(resultBins, items, remaining),
-	}, nil
+	}, stopped
 }
 
 type singleBinResult struct {
 	bin      *model.Bin
 	unfitted []*model.Item
 	count    int
+	stopped  error // set if the context ended before the search finished
 }
 
 func (bb *BranchBound) optimizeSingleBin(ctx context.Context, origBin *model.Bin, items []*model.Item) singleBinResult {
@@ -95,17 +108,16 @@ func (bb *BranchBound) optimizeFast(ctx context.Context, origBin *model.Bin, ite
 	// Greedy seed: pack in current order.
 	seedBin := cloneBinEmpty(origBin)
 	seedItems := resetItems(items)
-	for _, item := range seedItems {
-		engine.PlaceItem(seedBin, item)
-	}
+	stopped := placeAll(ctx, engine, seedBin, seedItems)
 
 	best := singleBinResult{
 		bin:      seedBin,
 		count:    len(seedBin.Items),
 		unfitted: collectUnfitted(seedItems),
+		stopped:  stopped,
 	}
 
-	if best.count >= n || n <= 1 {
+	if stopped != nil || best.count >= n || n <= 1 {
 		return best
 	}
 
@@ -116,14 +128,18 @@ func (bb *BranchBound) optimizeFast(ctx context.Context, origBin *model.Bin, ite
 	}
 
 	for nextPermutation(indices) {
-		if ctx.Err() != nil {
-			break
-		}
-
+		// A fresh engine per permutation: engines remember the bins they
+		// pack, and every permutation uses a new one.
+		permEngine := bb.newEngine()
 		binCopy := cloneBinEmpty(origBin)
 		itemsCopy := resetItems(items)
-		for _, idx := range indices {
-			engine.PlaceItem(binCopy, itemsCopy[idx])
+		ordered := make([]*model.Item, n)
+		for i, idx := range indices {
+			ordered[i] = itemsCopy[idx]
+		}
+		// A permutation cut short is discarded: the best one stands.
+		if best.stopped = placeAll(ctx, permEngine, binCopy, ordered); best.stopped != nil {
+			break
 		}
 
 		placed := len(binCopy.Items)
@@ -148,39 +164,37 @@ func (bb *BranchBound) optimizeFull(ctx context.Context, origBin *model.Bin, ite
 	// Greedy seed.
 	seedBin := cloneBinEmpty(origBin)
 	seedItems := resetItems(items)
-	for _, item := range seedItems {
-		engine.PlaceItem(seedBin, item)
-	}
+	stopped := placeAll(ctx, engine, seedBin, seedItems)
 
 	best := singleBinResult{
 		bin:      seedBin,
 		count:    len(seedBin.Items),
 		unfitted: collectUnfitted(seedItems),
+		stopped:  stopped,
 	}
 
-	if best.count >= n || n <= 1 {
+	if stopped != nil || best.count >= n || n <= 1 {
 		return best
 	}
 
 	// DFS with backtracking.
 	used := make([]bool, n)
 	emptyBin := cloneBinEmpty(origBin)
-	bb.dfsFull(ctx, engine, emptyBin, items, used, 0, &best)
+	best.stopped = bb.dfsFull(ctx, emptyBin, items, used, 0, &best)
 
 	return best
 }
 
 func (bb *BranchBound) dfsFull(
 	ctx context.Context,
-	engine placement.Engine,
 	parentBin *model.Bin,
 	items []*model.Item,
 	used []bool,
 	depth int,
 	best *singleBinResult,
-) {
-	if ctx.Err() != nil {
-		return
+) error {
+	if err := deadline.Err(ctx); err != nil {
+		return err
 	}
 
 	// Pruning: can't beat best even placing all remaining items.
@@ -191,7 +205,7 @@ func (bb *BranchBound) dfsFull(
 		}
 	}
 	if depth+remaining <= best.count {
-		return
+		return nil
 	}
 
 	for i := range items {
@@ -204,7 +218,9 @@ func (bb *BranchBound) dfsFull(
 			itemCopy := resetItem(items[i])
 			itemCopy.AllowedRotations = []model.RotationType{rt}
 
-			if !engine.PlaceItem(binCopy, itemCopy) {
+			// Each node works on a new snapshot, so a fresh engine avoids
+			// keeping state for bins that are thrown away.
+			if !bb.newEngine().PlaceItem(binCopy, itemCopy) {
 				continue
 			}
 
@@ -218,16 +234,31 @@ func (bb *BranchBound) dfsFull(
 			}
 
 			if newDepth < len(items) {
-				bb.dfsFull(ctx, engine, binCopy, items, used, newDepth, best)
+				if err := bb.dfsFull(ctx, binCopy, items, used, newDepth, best); err != nil {
+					used[i] = false
+					return err
+				}
 			}
 
 			used[i] = false
 
 			if best.count >= len(items) {
-				return // optimal found
+				return nil // optimal found
 			}
 		}
 	}
+	return nil
+}
+
+// placeAll places items in order, stopping early when the context ends.
+func placeAll(ctx context.Context, engine placement.Engine, bin *model.Bin, items []*model.Item) error {
+	for _, item := range items {
+		if err := deadline.Err(ctx); err != nil {
+			return err
+		}
+		engine.PlaceItem(bin, item)
+	}
+	return nil
 }
 
 func collectUnfitted(items []*model.Item) []*model.Item {

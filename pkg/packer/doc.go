@@ -39,12 +39,18 @@
 // # Placement Engines
 //
 // Engines handle the geometric placement of items within a bin. The
-// [placement] package provides three engines: PivotEngine, ExtremePointEngine,
-// and LAFFEngine, each with different trade-offs between speed and packing quality.
+// [placement] package provides PivotEngine, ExtremePointEngine, MaxRectsEngine
+// and LAFFEngine, each with different trade-offs between speed and packing
+// quality.
+//
+// [Packer.Pack] packs copies of the bins and items you added, which stay
+// unchanged, so calling it again gives the same result. Items already placed
+// in an added bin are kept.
 //
 // # Context Support
 //
-// [Packer.Pack] accepts a [context.Context] for cancellation and deadline support.
-// If the context is cancelled, the packer stops placing items and returns the
-// partial result.
+// [Packer.Pack] accepts a [context.Context] for cancellation and deadline
+// support. If the context ends first, the packer stops placing items and
+// returns the partial result (the rest unfitted) together with the context
+// error.
 package packer

@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/strategy"
@@ -59,6 +60,9 @@ func NewTrialPacking(newEngine func() placement.Engine, opts ...TrialOption) *Tr
 // The bins parameter represents available bin types (templates); the solver
 // clones them as needed to create new bin instances.
 func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,
@@ -74,8 +78,9 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	var unfitted []*model.Item
 	engine := tp.newEngine()
 
+	var stopped error
 	for len(remaining) > 0 {
-		if ctx.Err() != nil {
+		if stopped = deadline.Err(ctx); stopped != nil {
 			unfitted = append(unfitted, remaining...)
 			break
 		}
@@ -99,8 +104,14 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		}
 
 		// No existing bin can fit this item. Run trial packing to decide
-		// which bin type to open.
-		best := tp.selectBinType(ctx, bins, remaining)
+		// which bin type to open. If the context ended during the search,
+		// not every type was tried: stop and report it.
+		best, err := tp.selectBinType(ctx, bins, remaining)
+		if err != nil {
+			stopped = err
+			unfitted = append(unfitted, remaining...)
+			break
+		}
 		if best.binTypeIdx < 0 {
 			// Item doesn't fit in any bin type at all.
 			unfitted = append(unfitted, item)
@@ -111,6 +122,7 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		// Open a new bin of the selected type.
 		newBin := cloneBinEmpty(bins[best.binTypeIdx])
 		newBin.ID = binInstanceID(bins[best.binTypeIdx].ID, len(openBins))
+		newBin.TypeID = bins[best.binTypeIdx].ID
 
 		// Place the current item in the new bin.
 		if !engine.PlaceItem(newBin, item) {
@@ -128,7 +140,7 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		UnfittedItems: unfitted,
 		Stats:         computeStats(openBins, items, unfitted),
 	}
-	return result, ctx.Err()
+	return result, stopped
 }
 
 // trialScore holds the outcome of simulating packing into a candidate bin type.
@@ -142,15 +154,17 @@ type trialScore struct {
 }
 
 // selectBinType runs trial packing for each bin type and returns the best.
-func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin, remaining []*model.Item) trialScore {
+// It returns the context error if the context ended before every type was
+// tried (or during a trial).
+func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin, remaining []*model.Item) (trialScore, error) {
 	best := trialScore{binTypeIdx: -1}
 
 	for i, bt := range binTypes {
-		if ctx.Err() != nil {
-			break
+		if err := deadline.Err(ctx); err != nil {
+			return best, err
 		}
 
-		score := tp.runTrial(bt, remaining, i)
+		score := tp.runTrial(ctx, bt, remaining, i)
 
 		if score.fittedCount == 0 {
 			continue
@@ -168,18 +182,23 @@ func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin
 		}
 	}
 
-	return best
+	return best, deadline.Err(ctx)
 }
 
 // runTrial simulates packing remaining items into a fresh bin of the given type.
 // The first item in remaining is the one that must be placed; if it doesn't fit,
 // the trial is considered non-viable (fittedCount = 0).
-func (tp *TrialPacking) runTrial(binType *model.Bin, remaining []*model.Item, typeIdx int) trialScore {
+func (tp *TrialPacking) runTrial(ctx context.Context, binType *model.Bin, remaining []*model.Item, typeIdx int) trialScore {
 	trialBin := cloneBinEmpty(binType)
 	trialItems := resetItems(remaining)
 	trialEngine := tp.newEngine()
 
-	for _, item := range trialItems {
+	for i, item := range trialItems {
+		// A trial cut short still scores the items placed so far; the
+		// caller stops right after.
+		if i > 0 && deadline.Err(ctx) != nil {
+			break
+		}
 		trialEngine.PlaceItem(trialBin, item)
 	}
 
@@ -235,14 +254,17 @@ func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*mo
 	leftoverVol := totalVol - packedVol
 	leftoverWeight := totalWeight // conservative: ignore weight packed
 
-	// Find the largest bin type for the lower bound.
+	// Find the largest bin type for the lower bound. A type without a
+	// weight limit means weight gives no bound.
 	maxBinVol := 0.0
 	maxBinWeight := 0.0
 	for _, bt := range binTypes {
 		if bt.Volume > maxBinVol {
 			maxBinVol = bt.Volume
 		}
-		if bt.MaxWeight > maxBinWeight {
+		if !bt.HasWeightLimit() {
+			maxBinWeight = math.Inf(1)
+		} else if bt.MaxWeight > maxBinWeight {
 			maxBinWeight = bt.MaxWeight
 		}
 	}
@@ -252,7 +274,7 @@ func (tp *TrialPacking) estimateTotalBins(binTypes []*model.Bin, remaining []*mo
 		volBound = math.Ceil(leftoverVol / maxBinVol)
 	}
 	weightBound := 0.0
-	if maxBinWeight > 0 {
+	if maxBinWeight > 0 && !math.IsInf(maxBinWeight, 1) {
 		weightBound = math.Ceil(leftoverWeight / maxBinWeight)
 	}
 

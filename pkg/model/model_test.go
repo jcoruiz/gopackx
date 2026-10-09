@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestNewItem(t *testing.T) {
 	item := NewItem("test", 10, 20, 30, 5.0)
@@ -104,8 +107,8 @@ func TestRemoveLastItem(t *testing.T) {
 	if bin.TotalWeight() != 13 {
 		t.Errorf("TotalWeight = %f, want 13", bin.TotalWeight())
 	}
-	if !bin.HasFragile {
-		t.Error("expected HasFragile = true")
+	if len(bin.fragile) != 1 {
+		t.Error("expected one fragile item tracked")
 	}
 
 	removed := bin.RemoveLastItem()
@@ -121,11 +124,11 @@ func TestRemoveLastItem(t *testing.T) {
 	if bin.TotalWeight() != 5 {
 		t.Errorf("TotalWeight = %f, want 5", bin.TotalWeight())
 	}
-	if bin.HasFragile {
-		t.Error("HasFragile should be false after removing only fragile item")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked after removing the only one")
 	}
-	if len(bin.AABBData) != 6 {
-		t.Errorf("AABBData len = %d, want 6", len(bin.AABBData))
+	if len(bin.boxes) != 6 {
+		t.Errorf("boxes len = %d, want 6", len(bin.boxes))
 	}
 
 	// Remove last remaining item.
@@ -159,24 +162,24 @@ func TestPlaceItemFragileTracking(t *testing.T) {
 	f2 := NewItem("f2", 10, 10, 10, 1, ItemFragile())
 
 	bin.PlaceItem(normal)
-	if bin.HasFragile {
-		t.Error("HasFragile should be false with no fragile items")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked yet")
 	}
 
 	bin.PlaceItem(f1)
 	bin.PlaceItem(f2)
-	if len(bin.FragileIdxs) != 2 {
-		t.Errorf("FragileIdxs = %v, want 2 entries", bin.FragileIdxs)
+	if len(bin.fragile) != 2 {
+		t.Errorf("fragile = %v, want 2 entries", bin.fragile)
 	}
 
 	bin.RemoveLastItem() // remove f2
-	if len(bin.FragileIdxs) != 1 {
-		t.Errorf("FragileIdxs = %v, want 1 entry after removing f2", bin.FragileIdxs)
+	if len(bin.fragile) != 1 {
+		t.Errorf("fragile = %v, want 1 entry after removing f2", bin.fragile)
 	}
 
 	bin.RemoveLastItem() // remove f1
-	if bin.HasFragile {
-		t.Error("HasFragile should be false after removing all fragile items")
+	if len(bin.fragile) != 0 {
+		t.Error("no fragile item should be tracked after removing all of them")
 	}
 }
 
@@ -204,5 +207,88 @@ func TestBinWeightAndVolume(t *testing.T) {
 	}
 	if bin.VolumeUsedPct() != 12.5 {
 		t.Errorf("VolumeUsedPct = %f, want 12.5", bin.VolumeUsedPct())
+	}
+}
+
+func TestItemCloneAndResetPlacement(t *testing.T) {
+	it := NewItem("a", 1, 2, 3, 4, ItemUpright())
+	it.Position = [3]float64{5, 6, 7}
+	it.RotationType = RotationDHW
+	it.Placed = true
+
+	c := it.Clone()
+	c.AllowedRotations[0] = RotationHDW
+	if it.AllowedRotations[0] != RotationWHD {
+		t.Error("Clone shares AllowedRotations with the original")
+	}
+	if c.Position != it.Position || !c.Placed {
+		t.Error("Clone should keep the placement")
+	}
+
+	c.ResetPlacement()
+	if c.Placed || c.Position != [3]float64{} || c.RotationType != RotationWHD {
+		t.Errorf("ResetPlacement left %+v", c)
+	}
+	if !it.Placed {
+		t.Error("ResetPlacement changed the original")
+	}
+}
+
+func TestBinCloneAndCloneEmpty(t *testing.T) {
+	b := NewBin("b", 10, 10, 10, 50, BinCost(3))
+	it := NewItem("glass", 2, 2, 2, 1, ItemFragile())
+	b.PlaceItem(it)
+
+	c := b.Clone()
+	if len(c.Items) != 1 || c.Items[0] == it || c.Items[0].ID != "glass" {
+		t.Fatal("Clone should hold a copy of the placed item")
+	}
+	if c.TotalWeight() != 1 || len(c.fragile) != 1 {
+		t.Error("Clone lost the tracked weight or fragile index")
+	}
+	c.RemoveLastItem()
+	if len(b.Items) != 1 || b.TotalWeight() != 1 {
+		t.Error("changing the clone changed the original")
+	}
+
+	e := b.CloneEmpty()
+	if len(e.Items) != 0 || e.TotalWeight() != 0 || e.Cost != 3 || e.Width != 10 {
+		t.Errorf("CloneEmpty = %+v", e)
+	}
+}
+
+func TestWeightLimit(t *testing.T) {
+	limited := NewBin("limited", 10, 10, 10, 5)
+	limited.PlaceItem(NewItem("a", 1, 1, 1, 3))
+	if !limited.HasWeightLimit() || limited.RemainingWeight() != 2 {
+		t.Errorf("limited: HasWeightLimit=%v RemainingWeight=%v", limited.HasWeightLimit(), limited.RemainingWeight())
+	}
+	if !limited.CanCarry(2) || limited.CanCarry(2.1) {
+		t.Error("limited bin should carry 2 more kg and not 2.1")
+	}
+
+	// A MaxWeight of 0 means no limit, like Cost and LoadBear.
+	free := NewBin("free", 10, 10, 10, 0)
+	free.PlaceItem(NewItem("a", 1, 1, 1, 1e6))
+	if free.HasWeightLimit() || !math.IsInf(free.RemainingWeight(), 1) {
+		t.Errorf("free: HasWeightLimit=%v RemainingWeight=%v", free.HasWeightLimit(), free.RemainingWeight())
+	}
+	if !free.CanCarry(1e9) || !free.AllowsWeight(1e12) {
+		t.Error("a bin without a weight limit should carry anything")
+	}
+}
+
+func TestRevisionChangesWithItems(t *testing.T) {
+	b := NewBin("b", 10, 10, 10, 0)
+	r0 := b.Revision()
+	b.PlaceItem(NewItem("a", 1, 1, 1, 1))
+	r1 := b.Revision()
+	b.RemoveLastItem()
+	r2 := b.Revision()
+	if r1 == r0 || r2 == r1 || r2 == r0 {
+		t.Errorf("revisions %d, %d, %d should all differ", r0, r1, r2)
+	}
+	if c := b.Clone(); c.Revision() != b.Revision() {
+		t.Error("a clone should start at the same revision")
 	}
 }

@@ -65,7 +65,7 @@ An `Item` has an ID, width, height, depth, and weight. Optional settings (rotati
 
 ### Step 4: Pack
 
-Call `Pack` with a `context.Context`. All packing operations respect context cancellation and deadlines.
+Call `Pack` with a `context.Context`. All packing operations respect context cancellation and deadlines: if the context ends first, they return the partial result together with the context error. Invalid input (for example a negative weight or a size of 0) returns an error that wraps `model.ErrInvalidInput`.
 
 ```go
     result, err := p.Pack(context.Background())
@@ -73,6 +73,8 @@ Call `Pack` with a `context.Context`. All packing operations respect context can
         log.Fatalf("packing failed: %v", err)
     }
 ```
+
+`Pack` works on copies: the bins and items you added are not modified, and calling `Pack` again gives the same result.
 
 ### Step 5: Read the Results
 
@@ -152,13 +154,13 @@ Items support functional options at creation time:
 // Keep upright (only rotations 0 and 3, preserving the height axis)
 model.NewItem("fragile-tv", 60, 40, 10, 15, model.ItemUpright())
 
-// Mark as fragile (nothing can be placed on top)
+// Mark as fragile (nothing can rest on it)
 model.NewItem("glass", 30, 30, 30, 5, model.ItemFragile())
 
 // Set packing priority (1 = highest priority, packed first)
 model.NewItem("urgent", 20, 20, 20, 3, model.ItemPriority(1))
 
-// Limit load-bearing capacity (max weight on top in kg)
+// Limit load-bearing capacity (max weight in kg stacked on top, whole stack counted)
 model.NewItem("eggs", 40, 20, 30, 2, model.ItemLoadBear(5))
 
 // Assign to a binding group (grouped items tend to land in the same bin)

@@ -183,9 +183,10 @@ Strategy choice has minimal impact on raw packing time -- the placement engine d
 
 | Engine | Time per pack |
 |---|---|
-| LAFF-Fast | ~0.25ms |
-| LAFF | ~0.38ms |
-| Pivot | ~1.5ms |
-| ExtremePoints | ~17ms |
+| LAFF-Fast | ~0.08ms |
+| LAFF | ~0.08ms |
+| Pivot | ~0.1ms |
+| ExtremePoints | ~1.4ms |
+| MaxRects | ~4ms |
 
 The strategy primarily affects **packing quality** (utilization, bin count), not speed. Choose based on your quality requirements, then pick an engine for the speed/quality trade-off you need.

@@ -15,10 +15,12 @@ A high-performance 3D bin packing library for Go with variable-sized box selecti
 - **7 packing strategies** - BestFitDecreasing, MinimizeBins, BestFit, Greedy, NextFit, WorstFit, AlmostWorstFit
 - **Advanced solvers** - TrialPacking, Metaheuristic, Branch & Bound (exact), and Parallel multi-config solver
 - **Cost optimization** - assign costs per box type; solvers minimize total cost instead of box count
-- **Physical constraints** - weight limits, load-bearing capacity, fragile items, stability checks, gravity center analysis
+- **Physical constraints** - weight limits, load-bearing capacity (counting everything stacked on an item), fragile items, stability checks, gravity center analysis
 - **6 rotation types** with support for upright-only and custom rotation restrictions
 - **Fix-point correction** - automatically compacts items toward the origin for tighter packing
-- **Context-aware** - all operations respect `context.Context` for cancellation and deadlines
+- **Context-aware** - all operations respect `context.Context` for cancellation and deadlines, returning the best result so far with the context error (deadlines work in WebAssembly too)
+- **Deterministic** - the same input always gives the same packing
+- **Validated input** - NaN or non-positive sizes, negative weights and other bad input return an error instead of a bogus packing
 - **Zero dependencies** - only the Go standard library
 
 ## Installation
@@ -130,7 +132,7 @@ item := model.NewItem("fragile-tv", 80, 50, 10, 15, model.ItemUpright())
 // Fragile (nothing stacked on top)
 item := model.NewItem("glass", 30, 20, 20, 5, model.ItemFragile())
 
-// Load-bearing capacity (max 50kg on top)
+// Load-bearing capacity (max 50 kg stacked on top, counting the whole stack)
 item := model.NewItem("crate", 40, 40, 40, 20, model.ItemLoadBear(50))
 
 // Priority (1 = highest, packed first)
@@ -210,6 +212,25 @@ result, _ := ps.Solve(ctx, bins, items)
 
 See [Solvers documentation](docs/solvers.md) for details on each solver and when to use which.
 
+### Errors and deadlines
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+defer cancel()
+
+result, err := gopackx.Pack(ctx, boxes, items, gopackx.Optimize())
+switch {
+case errors.Is(err, model.ErrInvalidInput):
+    log.Fatal(err) // e.g. an item with a negative weight
+case errors.Is(err, context.DeadlineExceeded):
+    // result is the best packing found within 200 ms
+}
+```
+
+Every solver and the `Packer` return the best result found so far together with the context error when the context ends first, and a nil error when they finish. They never modify the bins and items you pass: the packed bins are in `result.Bins`.
+
+A `MaxWeight` of 0 means no weight limit.
+
 ## Architecture
 
 ```
@@ -231,11 +252,22 @@ pkg/
 go test ./...
 ```
 
+Property tests check every solver and engine against the physical rules with code independent of the library. Explore more scenarios with fuzzing, and run the suite as WebAssembly as CI does:
+
+```bash
+go test -fuzz=FuzzPhysicalRules -fuzztime=1m .
+PATH="$(go env GOROOT)/lib/wasm:$PATH" GOOS=js GOARCH=wasm go test -short ./...
+```
+
 Linting uses [golangci-lint](https://golangci-lint.run) with the configuration in `.golangci.yml`:
 
 ```bash
 golangci-lint run
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). v0.3.0 changes several behaviors; read it before upgrading.
 
 ## License
 

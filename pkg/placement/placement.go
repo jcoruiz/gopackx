@@ -10,3 +10,10 @@ type Engine interface {
 	// and the item is appended to bin.Items.
 	PlaceItem(bin *model.Bin, item *model.Item) bool
 }
+
+// Resetter is implemented by every engine in this package. Engines keep
+// per-bin state while packing; Reset forgets it so the engine can be reused
+// for an unrelated packing run.
+type Resetter interface {
+	Reset()
+}

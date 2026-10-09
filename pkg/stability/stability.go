@@ -55,8 +55,9 @@ func CheckSupport(item *model.Item, placed []*model.Item, ratio float64) bool {
 	return SupportRatio(item, placed) >= ratio-epsilon
 }
 
-// WeightAbove calculates the total weight resting directly on top of an item,
-// proportional to the overlap area.
+// WeightAbove calculates the weight of the items resting directly on top
+// of an item, each counted by the share of its base that touches it. It
+// ignores what is stacked on those items; see LoadOnTop for the full load.
 func WeightAbove(item *model.Item, placed []*model.Item) float64 {
 	dim := item.Dimension()
 	itemTop := item.Position[model.HeightAxis] + dim[model.HeightAxis]
@@ -90,16 +91,68 @@ func WeightAbove(item *model.Item, placed []*model.Item) float64 {
 	return total
 }
 
-// CheckLoadBearing returns true if the item's load-bearing capacity is not exceeded.
-// If LoadBear is 0, no limit is enforced.
+// LoadOnTop returns the full weight resting on an item: every item directly
+// on top of it passes on its own weight plus the load on it, split among
+// the items under it in proportion to how much of its base rests on each.
+// This is the load that placement engines check against LoadBear.
+func LoadOnTop(item *model.Item, placed []*model.Item) float64 {
+	memo := make(map[*model.Item]float64, len(placed))
+	var load func(it *model.Item) float64
+	load = func(it *model.Item) float64 {
+		if v, ok := memo[it]; ok {
+			return v
+		}
+		total := 0.0
+		for _, above := range placed {
+			if above == it {
+				continue
+			}
+			touch := contact(above, it)
+			if touch <= epsilon {
+				continue
+			}
+			supported := 0.0
+			for _, under := range placed {
+				if under != above {
+					supported += contact(above, under)
+				}
+			}
+			total += (above.Weight + load(above)) * touch / supported
+		}
+		memo[it] = total
+		return total
+	}
+	return load(item)
+}
+
+// contact returns the area of the base of above that rests on the top face
+// of under. above must start strictly higher than under, so that items
+// thinner than the tolerance cannot rest on each other in a cycle.
+func contact(above, under *model.Item) float64 {
+	ad, ud := above.Dimension(), under.Dimension()
+	if math.Abs(above.Position[model.HeightAxis]-(under.Position[model.HeightAxis]+ud[model.HeightAxis])) > epsilon ||
+		above.Position[model.HeightAxis] <= under.Position[model.HeightAxis] {
+		return 0
+	}
+	return overlapLength(above.Position[model.WidthAxis], ad[model.WidthAxis], under.Position[model.WidthAxis], ud[model.WidthAxis]) *
+		overlapLength(above.Position[model.DepthAxis], ad[model.DepthAxis], under.Position[model.DepthAxis], ud[model.DepthAxis])
+}
+
+// CheckLoadBearing reports whether an item's limits hold: nothing may rest
+// on a fragile item, and the full load on an item with a LoadBear above 0
+// (see LoadOnTop) must not exceed it.
 func CheckLoadBearing(item *model.Item, placed []*model.Item) bool {
-	if item.LoadBear <= 0 && !item.Fragile {
+	if item.Fragile {
+		for _, other := range placed {
+			if other != item && contact(other, item) > epsilon {
+				return false
+			}
+		}
+	}
+	if item.LoadBear <= 0 {
 		return true
 	}
-	if item.Fragile {
-		return WeightAbove(item, placed) < epsilon
-	}
-	return WeightAbove(item, placed) <= item.LoadBear+epsilon
+	return LoadOnTop(item, placed) <= item.LoadBear+epsilon
 }
 
 // GravityCenter calculates weight distribution across 4 quadrants of the bin floor.

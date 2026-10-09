@@ -2,8 +2,10 @@ package solver
 
 import (
 	"context"
+	"math/rand/v2"
 	"strconv"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 )
@@ -24,6 +26,7 @@ type Metaheuristic struct {
 	seedSolver   Solver
 	maxIter      int
 	maxNoImprove int
+	randomSeed   uint64
 }
 
 // MetaOption configures the Metaheuristic solver.
@@ -33,6 +36,14 @@ type MetaOption func(*Metaheuristic)
 // Default: TrialPacking with lookahead (Level 4).
 func MetaSeed(s Solver) MetaOption {
 	return func(m *Metaheuristic) { m.seedSolver = s }
+}
+
+// MetaRandomSeed sets the seed of the random choices the search makes
+// (which pairs to swap first, which orderings to try). Each Solve starts
+// from this seed, so the same input always gives the same result. Default: 1.
+// Try other seeds to explore different solutions.
+func MetaRandomSeed(seed uint64) MetaOption {
+	return func(m *Metaheuristic) { m.randomSeed = seed }
 }
 
 // MetaMaxIter sets the maximum number of VNS iterations.
@@ -53,6 +64,7 @@ func NewMetaheuristic(newEngine func() placement.Engine, opts ...MetaOption) *Me
 		newEngine:    newEngine,
 		maxIter:      1000,
 		maxNoImprove: 200,
+		randomSeed:   1,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -66,6 +78,9 @@ func NewMetaheuristic(newEngine func() placement.Engine, opts ...MetaOption) *Me
 // Solve finds a near-optimal packing by starting from a seed solution and
 // iteratively improving it with VNS neighborhood operators.
 func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error) {
+	if err := model.Validate(bins, items); err != nil {
+		return nil, err
+	}
 	if len(bins) == 0 || len(items) == 0 {
 		return &model.Result{
 			Bins:          bins,
@@ -79,8 +94,8 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	if err != nil {
 		return seedResult, err
 	}
-	if ctx.Err() != nil {
-		return seedResult, nil
+	if err := deadline.Err(ctx); err != nil {
+		return seedResult, err
 	}
 
 	// Convert to abstract solution.
@@ -89,9 +104,13 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 
 	ops := []neighborhoodOp{opMove, opSwap, opRepack, opChangeType}
 	noImprove := 0
+	// Each Solve has its own generator: results repeat, and concurrent
+	// calls share no state.
+	rng := rand.New(rand.NewPCG(m.randomSeed, 0))
+	var stopped error
 
 	for iter := 0; iter < m.maxIter && noImprove < m.maxNoImprove; iter++ {
-		if ctx.Err() != nil {
+		if stopped = deadline.Err(ctx); stopped != nil {
 			break
 		}
 
@@ -99,12 +118,12 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		k := 0
 
 		for k < len(ops) {
-			if ctx.Err() != nil {
+			if stopped = deadline.Err(ctx); stopped != nil {
 				break
 			}
 
 			// Shake: generate a neighbor in neighborhood k.
-			candidate := m.shake(current, ops[k], items, bins)
+			candidate := m.shake(current, ops[k], items, bins, rng)
 			if candidate == nil {
 				k++
 				continue
@@ -143,21 +162,21 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	}
 
 	// Materialize the best solution into a Result.
-	return m.materialize(best, items, bins), nil
+	return m.materialize(best, items, bins), stopped
 }
 
 // shake applies a neighborhood operator to generate a candidate solution.
-func (m *Metaheuristic) shake(sol *solution, op neighborhoodOp, items []*model.Item, binTypes []*model.Bin) *solution {
+func (m *Metaheuristic) shake(sol *solution, op neighborhoodOp, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
 	switch op {
 	case opMove:
 		return shakeMove(sol, items, binTypes)
 	case opSwap:
-		return shakeSwap(sol, items, binTypes)
+		return shakeSwap(sol, items, binTypes, rng)
 	case opRepack:
 		// Use engine-validated repack for 3D feasibility during redistribution.
-		return shakeRepackWithEngine(sol, items, binTypes, m.newEngine)
+		return shakeRepackWithEngine(sol, items, binTypes, m.newEngine, rng)
 	case opChangeType:
-		return shakeChangeType(sol, items, binTypes)
+		return shakeChangeType(sol, items, binTypes, rng)
 	}
 	return nil
 }
@@ -206,6 +225,7 @@ func (m *Metaheuristic) materialize(sol *solution, items []*model.Item, binTypes
 		packed, ok := repackBin(m.newEngine, bt, binItems)
 		if ok {
 			packed.ID = bt.ID + "-" + strconv.Itoa(len(resultBins))
+			packed.TypeID = bt.ID
 			resultBins = append(resultBins, packed)
 		} else {
 			// Shouldn't happen if revalidation passed, but handle gracefully.

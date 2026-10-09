@@ -1,7 +1,7 @@
 package solver
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
@@ -97,11 +97,24 @@ func extractSolution(result *model.Result, items []*model.Item, binTypes []*mode
 	return sol
 }
 
-// matchBinType finds which bin type matches the given bin by dimensions.
+// matchBinType finds the bin type a bin was opened from: the type named by
+// its TypeID if it has the same specification, otherwise the first type
+// with the same specification. Matching on size alone would mix up types
+// that differ only in cost.
 func matchBinType(bin *model.Bin, binTypes []*model.Bin) int {
+	same := func(bt *model.Bin) bool {
+		return bt.Width == bin.Width && bt.Height == bin.Height && bt.Depth == bin.Depth &&
+			bt.MaxWeight == bin.MaxWeight && bt.Cost == bin.Cost
+	}
+	if bin.TypeID != "" {
+		for i, bt := range binTypes {
+			if bt.ID == bin.TypeID && same(bt) {
+				return i
+			}
+		}
+	}
 	for i, bt := range binTypes {
-		if bt.Width == bin.Width && bt.Height == bin.Height &&
-			bt.Depth == bin.Depth && bt.MaxWeight == bin.MaxWeight {
+		if same(bt) {
 			return i
 		}
 	}
@@ -252,7 +265,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 				continue
 			}
 			// Quick weight check.
-			if binFillWeight(sol, b, items)+item.Weight > bt.MaxWeight {
+			if !bt.AllowsWeight(binFillWeight(sol, b, items) + item.Weight) {
 				continue
 			}
 
@@ -270,7 +283,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 }
 
 // shakeSwap swaps two items between different bins.
-func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
+func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
 	if sol.nBins < 2 {
 		return nil
 	}
@@ -291,7 +304,7 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 	}
 
 	// Shuffle and try pairs from different bins.
-	rand.Shuffle(len(pairs), func(i, j int) {
+	rng.Shuffle(len(pairs), func(i, j int) {
 		pairs[i], pairs[j] = pairs[j], pairs[i]
 	})
 
@@ -308,7 +321,7 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 			// Weight check after swap.
 			w1 := binFillWeight(sol, p1.binIdx, items) - i1.Weight + i2.Weight
 			w2 := binFillWeight(sol, p2.binIdx, items) - i2.Weight + i1.Weight
-			if w1 > bt1.MaxWeight || w2 > bt2.MaxWeight {
+			if !bt1.AllowsWeight(w1) || !bt2.AllowsWeight(w2) {
 				continue
 			}
 
@@ -334,12 +347,12 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 
 // shakeRepack tries to eliminate the least-filled bin by redistributing its items.
 // It uses the actual placement engine to verify each redistribution is 3D-feasible.
-func shakeRepack(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
-	return shakeRepackWithEngine(sol, items, binTypes, nil)
+func shakeRepack(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
+	return shakeRepackWithEngine(sol, items, binTypes, nil, rng)
 }
 
 // shakeRepackWithEngine tries to eliminate a bin using optional engine validation.
-func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine) *solution {
+func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine, rng *rand.Rand) *solution {
 	if sol.nBins < 2 {
 		return nil
 	}
@@ -371,7 +384,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 		}
 
 		// Try multiple redistribution orders.
-		result := tryRedistribute(sol, targetBin, targetItems, items, binTypes, newEngine)
+		result := tryRedistribute(sol, targetBin, targetItems, items, binTypes, newEngine, rng)
 		if result != nil {
 			return result
 		}
@@ -381,7 +394,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 
 // tryRedistribute attempts to redistribute items from targetBin to other bins.
 // Tries multiple item orderings and bin orderings to maximize chances.
-func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine) *solution {
+func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine, rng *rand.Rand) *solution {
 	// Try different item orderings: volume desc, volume asc, and shuffled.
 	orderings := make([][]int, 3)
 	for o := range 3 {
@@ -397,7 +410,7 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 				return items[ordering[i]].Volume < items[ordering[j]].Volume
 			})
 		case 2: // shuffled
-			rand.Shuffle(len(ordering), func(i, j int) {
+			rng.Shuffle(len(ordering), func(i, j int) {
 				ordering[i], ordering[j] = ordering[j], ordering[i]
 			})
 		}
@@ -434,7 +447,7 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 				if binFillVolume(newSol, b, items)+item.Volume > bt.Volume {
 					continue
 				}
-				if binFillWeight(newSol, b, items)+item.Weight > bt.MaxWeight {
+				if !bt.AllowsWeight(binFillWeight(newSol, b, items) + item.Weight) {
 					continue
 				}
 
@@ -471,13 +484,13 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 }
 
 // shakeChangeType tries to downsize a bin to a smaller type.
-func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
+func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
 	// Try each bin, attempt to use a smaller bin type.
 	binOrder := make([]int, sol.nBins)
 	for i := range binOrder {
 		binOrder[i] = i
 	}
-	rand.Shuffle(len(binOrder), func(i, j int) {
+	rng.Shuffle(len(binOrder), func(i, j int) {
 		binOrder[i], binOrder[j] = binOrder[j], binOrder[i]
 	})
 
@@ -509,7 +522,7 @@ func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin) 
 			// Quick checks.
 			fillVol := binFillVolume(sol, b, items)
 			fillWeight := binFillWeight(sol, b, items)
-			if fillVol > bt.Volume || fillWeight > bt.MaxWeight {
+			if fillVol > bt.Volume || !bt.AllowsWeight(fillWeight) {
 				continue
 			}
 			// Check that each item's smallest dimension fits.

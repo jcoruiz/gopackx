@@ -1,0 +1,296 @@
+package gopackx_test
+
+import (
+	"context"
+	"errors"
+	"math"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jcoruiz/gopackx"
+	"github.com/jcoruiz/gopackx/pkg/model"
+	"github.com/jcoruiz/gopackx/pkg/packer"
+	"github.com/jcoruiz/gopackx/pkg/placement"
+	"github.com/jcoruiz/gopackx/pkg/solver"
+)
+
+type entryPoint struct {
+	name string
+	run  func(ctx context.Context, bins []*model.Bin, items []*model.Item) (*model.Result, error)
+}
+
+func newPivot() placement.Engine { return placement.NewPivotEngine() }
+
+// entryPoints lists every public way to pack.
+var entryPoints = []entryPoint{
+	{"Pack", func(ctx context.Context, b []*model.Bin, i []*model.Item) (*model.Result, error) {
+		return gopackx.Pack(ctx, b, i)
+	}},
+	{"Pack+Optimize", func(ctx context.Context, b []*model.Bin, i []*model.Item) (*model.Result, error) {
+		return gopackx.Pack(ctx, b, i, gopackx.Optimize())
+	}},
+	{"TrialPacking", solver.NewTrialPacking(newPivot, solver.WithLookahead()).Solve},
+	{"Metaheuristic", solver.NewMetaheuristic(newPivot).Solve},
+	{"BranchBound", solver.NewBranchBound(newPivot).Solve},
+	{"Parallel", solver.NewParallel().Solve},
+	{"Packer", func(ctx context.Context, b []*model.Bin, i []*model.Item) (*model.Result, error) {
+		p := packer.NewPacker()
+		for _, x := range b {
+			p.AddBin(x)
+		}
+		for _, x := range i {
+			p.AddItem(x)
+		}
+		return p.Pack(ctx)
+	}},
+}
+
+func TestEntryPointsRejectInvalidInput(t *testing.T) {
+	cases := map[string]func() ([]*model.Bin, []*model.Item){
+		"NaN item width": func() ([]*model.Bin, []*model.Item) {
+			return []*model.Bin{model.NewBin("b", 10, 10, 10, 100)}, []*model.Item{model.NewItem("a", math.NaN(), 1, 1, 1)}
+		},
+		"NaN bin": func() ([]*model.Bin, []*model.Item) {
+			return []*model.Bin{model.NewBin("b", math.NaN(), 10, 10, 100)}, []*model.Item{model.NewItem("a", 2, 2, 2, 1)}
+		},
+		// A negative weight used to offset a heavy item: a 1 kg box took
+		// items of -50 and 40 kg.
+		"negative weight": func() ([]*model.Bin, []*model.Item) {
+			return []*model.Bin{model.NewBin("b", 10, 10, 10, 1)}, []*model.Item{model.NewItem("a", 2, 2, 2, -50), model.NewItem("c", 2, 2, 2, 40)}
+		},
+		"zero-size item": func() ([]*model.Bin, []*model.Item) {
+			return []*model.Bin{model.NewBin("b", 10, 10, 10, 100)}, []*model.Item{model.NewItem("a", 0, 0, 0, 1)}
+		},
+	}
+	for _, ep := range entryPoints {
+		for name, mk := range cases {
+			t.Run(ep.name+"/"+name, func(t *testing.T) {
+				bins, items := mk()
+				res, err := ep.run(context.Background(), bins, items)
+				if !errors.Is(err, model.ErrInvalidInput) {
+					t.Fatalf("err = %v, want one wrapping model.ErrInvalidInput", err)
+				}
+				if res != nil {
+					t.Error("result should be nil for invalid input")
+				}
+			})
+		}
+	}
+}
+
+func heavyInput() ([]*model.Bin, []*model.Item) {
+	bins := make([]*model.Bin, 40)
+	for i := range bins {
+		bins[i] = model.NewBin("pallet-"+strconv.Itoa(i), 80, 60, 60, 1e9)
+	}
+	items := make([]*model.Item, 1200)
+	for i := range items {
+		items[i] = model.NewItem("i"+strconv.Itoa(i), float64(5+i*7%23), float64(4+i*5%19), float64(6+i*11%25), 1)
+	}
+	return bins, items
+}
+
+// When the context is already cancelled, every entry point returns the
+// (empty) best result together with the context error.
+func TestEntryPointsReturnResultAndErrorWhenCancelled(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			bins, items := heavyInput()
+			res, err := ep.run(ctx, bins, items[:50])
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("err = %v, want context.Canceled", err)
+			}
+			if res == nil {
+				t.Fatal("result is nil")
+			}
+			if res.Stats.FittedItems+res.Stats.UnfittedCount != 50 || res.Stats.TotalItems != 50 {
+				t.Errorf("stats %+v do not account for the 50 items", res.Stats)
+			}
+		})
+	}
+}
+
+// Every entry point stops soon after its deadline and says so. Branch &
+// Bound used to finish the permutation in progress, overshooting a 30 ms
+// deadline to 58 ms on this input.
+func TestEntryPointsHonorDeadlines(t *testing.T) {
+	const budget = 50 * time.Millisecond
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins, items := heavyInput()
+			ctx, cancel := context.WithTimeout(context.Background(), budget)
+			defer cancel()
+			start := time.Now()
+			res, err := ep.run(ctx, bins, items)
+			took := time.Since(start)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+			}
+			if res == nil || res.Stats.FittedItems+res.Stats.UnfittedCount != len(items) {
+				t.Fatalf("result does not account for every item: %+v", res)
+			}
+			if took > budget+100*time.Millisecond {
+				t.Errorf("returned after %v, deadline was %v", took, budget)
+			}
+		})
+	}
+}
+
+// pastDeadline has a deadline that passed but was never signalled, as with
+// GOOS=js where the deadline timer cannot fire while a solver computes.
+type pastDeadline struct{ context.Context }
+
+func (pastDeadline) Deadline() (time.Time, bool) { return time.Now().Add(-time.Second), true }
+
+func TestEntryPointsStopWhenTheDeadlineTimerCannotFire(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins, items := heavyInput()
+			res, err := ep.run(pastDeadline{context.Background()}, bins, items)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+			}
+			if res == nil {
+				t.Fatal("result is nil")
+			}
+		})
+	}
+}
+
+func fingerprint(r *model.Result) string {
+	var b strings.Builder
+	for _, bin := range r.Bins {
+		b.WriteString(bin.ID + "[")
+		for _, it := range bin.Items {
+			b.WriteString(it.ID + "@" + strconv.FormatFloat(it.Position[0], 'g', -1, 64) + "," +
+				strconv.FormatFloat(it.Position[1], 'g', -1, 64) + "," + strconv.FormatFloat(it.Position[2], 'g', -1, 64) +
+				"/" + strconv.Itoa(int(it.RotationType)) + " ")
+		}
+		b.WriteString("] ")
+	}
+	return b.String()
+}
+
+// The same input gives the same packing every time. The metaheuristic used
+// the global random source: 13 of 40 scenarios came out different on a
+// second run, some with a lower fill (84.4% vs 79.5%).
+func TestEntryPointsAreDeterministic(t *testing.T) {
+	input := func() ([]*model.Bin, []*model.Item) {
+		bins := []*model.Bin{model.NewBin("S", 30, 25, 20, 1e9), model.NewBin("M", 40, 35, 30, 1e9), model.NewBin("L", 60, 50, 40, 1e9)}
+		items := make([]*model.Item, 36)
+		for i := range items {
+			items[i] = model.NewItem("i"+strconv.Itoa(i), float64(5+i*7%25), float64(5+i*11%25), float64(5+i*13%25), 1)
+		}
+		return bins, items
+	}
+	for _, ep := range entryPoints {
+		if ep.name == "BranchBound" {
+			continue // exhaustive search, deterministic by construction and slow here
+		}
+		t.Run(ep.name, func(t *testing.T) {
+			b1, i1 := input()
+			r1, err := ep.run(context.Background(), b1, i1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b2, i2 := input()
+			r2, err := ep.run(context.Background(), b2, i2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fingerprint(r1) != fingerprint(r2) {
+				t.Errorf("two runs differ:\n%s\n%s", fingerprint(r1), fingerprint(r2))
+			}
+		})
+	}
+}
+
+// A MaxWeight of 0 used to mean that a box could hold nothing, silently
+// leaving every item unfitted. It now means no weight limit.
+func TestEntryPointsTreatZeroMaxWeightAsNoLimit(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{model.NewBin("free", 30, 30, 30, 0), model.NewBin("limited", 30, 30, 30, 100)}
+			items := []*model.Item{
+				model.NewItem("anvil", 20, 20, 20, 500),
+				model.NewItem("feather", 5, 5, 5, 1),
+			}
+			res, err := ep.run(context.Background(), bins, items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Stats.FittedItems != 2 {
+				t.Fatalf("fitted %d of 2 items, want both", res.Stats.FittedItems)
+			}
+			for _, b := range res.Bins {
+				for _, it := range b.Items {
+					if it.ID == "anvil" && b.HasWeightLimit() {
+						t.Errorf("the 500 kg anvil went into %s, which holds 100 kg", b.ID)
+					}
+				}
+			}
+			// Weight use only counts boxes with a limit.
+			if res.Stats.WeightUsedPct < 0 || res.Stats.WeightUsedPct > 100 {
+				t.Errorf("WeightUsedPct = %v", res.Stats.WeightUsedPct)
+			}
+		})
+	}
+}
+
+// Bins opened from a box type say which one through TypeID. Two types of
+// the same size used to be told apart by size only, so the metaheuristic
+// could report the expensive one: here the cheap box costs 1 and the
+// expensive one 10.
+func TestBinsRecordTheirType(t *testing.T) {
+	for _, ep := range entryPoints[:4] { // the catalog solvers
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{
+				model.NewBin("expensive", 30, 30, 30, 100, model.BinCost(10)),
+				model.NewBin("cheap", 30, 30, 30, 100, model.BinCost(1)),
+			}
+			items := []*model.Item{model.NewItem("a", 10, 10, 10, 1), model.NewItem("b", 10, 10, 10, 1)}
+			res, err := ep.run(context.Background(), bins, items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Bins) != 1 {
+				t.Fatalf("used %d bins, want 1", len(res.Bins))
+			}
+			if got := res.Bins[0]; got.TypeID != "cheap" || got.Cost != 1 || res.Stats.TotalCost != 1 {
+				t.Errorf("bin %s has TypeID %q and cost %v (total %v), want the cheap type", got.ID, got.TypeID, got.Cost, res.Stats.TotalCost)
+			}
+		})
+	}
+}
+
+// Items thinner than the position tolerance are valid input and must not
+// hang any entry point (load propagation used to loop on them).
+func TestEntryPointsHandleThinItems(t *testing.T) {
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			bins := []*model.Bin{model.NewBin("b", 2, 2, 2, 0)}
+			items := []*model.Item{
+				model.NewItem("base", 1, 1, 1, 1, model.ItemLoadBear(100)),
+				model.NewItem("sheet", 1, 0.0000005, 1, 1),
+				model.NewItem("sheet2", 1, 0.0000005, 1, 1, model.ItemLoadBear(0.5)),
+			}
+			finished := make(chan error, 1)
+			go func() {
+				_, err := ep.run(context.Background(), bins, items)
+				finished <- err
+			}()
+			select {
+			case err := <-finished:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("did not return")
+			}
+		})
+	}
+}

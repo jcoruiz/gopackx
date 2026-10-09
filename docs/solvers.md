@@ -12,8 +12,8 @@ GoPackX provides four solvers:
 
 | Solver | Use Case | Speed | Quality |
 |---|---|---|---|
-| **TrialPacking** | Variable-sized bin packing (VSBPP) | Fast (~100µs) | Good |
-| **Metaheuristic** | Cross-bin optimization (VSBPP) | Moderate (~30ms) | Best |
+| **TrialPacking** | Variable-sized bin packing (VSBPP) | Fast (~60µs) | Good |
+| **Metaheuristic** | Cross-bin optimization (VSBPP) | Moderate (~34ms) | Best |
 | **Branch & Bound** | Optimal single-bin packing | Varies | Optimal (small sets) |
 | **Parallel** | Concurrent multi-configuration search | Fast | Good |
 
@@ -27,6 +27,27 @@ result, err := gopackx.Pack(ctx, boxTypes, items)
 
 // Optimized (Metaheuristic - fewer boxes, more compute)
 result, err := gopackx.Pack(ctx, boxTypes, items, gopackx.Optimize())
+```
+
+## Errors, Deadlines and Determinism
+
+All solvers share these rules:
+
+- **Invalid input** (a NaN or non-positive size, a negative weight, an unknown rotation...) returns a nil result and an error that wraps `model.ErrInvalidInput`. See `model.Validate`.
+- **Deadlines and cancellation**: when the context ends before the solver finishes, `Solve` returns the best result found so far **and** the context error. Every item is in the result, placed or unfitted. Solvers check the context between item placements, so they stop within one placement of the deadline, also in WebAssembly. The error means that work was skipped: a solver that completes its last step after the deadline has passed returns a nil error, because its result is complete.
+- **Determinism**: the same input always gives the same result. The Metaheuristic draws its random choices from a generator seeded with `MetaRandomSeed` (default 1), and the Parallel solver breaks ties by configuration order.
+- **Inputs are not modified**: solvers pack copies; read the packed bins from `Result.Bins`. Bins opened from a box type record it in `Bin.TypeID`.
+
+```go
+ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+defer cancel()
+result, err := solver.NewMetaheuristic(newEngine).Solve(ctx, boxTypes, items)
+switch {
+case errors.Is(err, model.ErrInvalidInput):
+    return err // fix the input
+case errors.Is(err, context.DeadlineExceeded):
+    // result is the best packing found in 200ms
+}
 ```
 
 ## TrialPacking (Variable-Sized Bin Packing)
@@ -54,9 +75,9 @@ tp := solver.NewTrialPacking(engineFactory, solver.WithLookahead())
 
 | Scenario | Time | Memory |
 |---|---|---|
-| 20 items, 3 bin types | ~70µs | 74KB |
-| 20 items, 3 bin types (lookahead) | ~97µs | 65KB |
-| 50 items, 5 bin types | ~3.4ms | 802KB |
+| 20 items, 3 bin types | ~84µs | 70KB |
+| 20 items, 3 bin types (lookahead) | ~58µs | 50KB |
+| 50 items, 5 bin types | ~3.6ms | 752KB |
 
 ## Metaheuristic (Cross-Bin Optimization)
 
@@ -87,15 +108,28 @@ m := solver.NewMetaheuristic(engineFactory,
     solver.MetaMaxIter(2000),        // max VNS iterations (default: 1000)
     solver.MetaMaxNoImprove(500),    // stop after N iterations without improvement (default: 200)
     solver.MetaSeed(customSolver),   // use a custom seed solver
+    solver.MetaRandomSeed(42),       // seed of the random choices (default: 1)
 )
+```
+
+The search is deterministic: each `Solve` starts its random choices from `MetaRandomSeed`, so the same input gives the same result. Try other seeds to explore other solutions:
+
+```go
+best, _ := solver.NewMetaheuristic(newEngine).Solve(ctx, boxTypes, items)
+for seed := uint64(2); seed <= 5; seed++ {
+    r, _ := solver.NewMetaheuristic(newEngine, solver.MetaRandomSeed(seed)).Solve(ctx, boxTypes, items)
+    if r.Stats.TotalBins < best.Stats.TotalBins {
+        best = r
+    }
+}
 ```
 
 ### Performance
 
 | Scenario | Time | Result |
 |---|---|---|
-| 17 items, 4 bin types (real order) | ~30ms | 3 boxes (vs. 4 with TrialPacking) |
-| 20 items, 3 bin types (generic) | ~110µs | Same as seed (already optimal) |
+| 17 items, 4 bin types (real order) | ~34ms | 3 boxes (vs. 4 with TrialPacking) |
+| 20 items, 3 bin types (generic) | ~120µs | Same as seed (already optimal) |
 
 The metaheuristic adds minimal overhead when the seed is already optimal. The cost is only significant when cross-bin redistribution finds improvements.
 
@@ -146,7 +180,7 @@ bb := solver.NewBranchBound(func() placement.Engine {
 - **Seeds**: Starts with a greedy baseline (items in their current order). Improves from there.
 - **Pruning**: Stops early when all items fit.
 - **Complexity**: O(n!) permutations. Practical for **12 items or fewer** without a timeout.
-- **Benchmark**: 6 items ~5.3us, 8 items ~10.6us
+- **Benchmark**: 6 items ~2.6us, 8 items ~4.0us
 
 ### Full Variant
 
@@ -163,11 +197,11 @@ bb := solver.NewBranchBound(
 - **Seeds**: Same greedy baseline as the fast variant.
 - **Pruning**: Count-based pruning -- skips branches that cannot beat the current best even if all remaining items fit. Stops when optimal solution (all items placed) is found.
 - **Complexity**: O(n! * r^n) where r is the average number of allowed rotations. Practical for **8 items or fewer** without a timeout.
-- **Benchmark**: 6 items ~5.2us
+- **Benchmark**: 6 items ~2.6us
 
 ### Context and Timeouts
 
-Both variants respect `context.Context`. When the deadline expires or the context is cancelled, the solver returns the **best solution found so far**.
+Both variants respect `context.Context`. When the deadline expires or the context is cancelled, the solver returns the **best solution found so far** together with the context error. The deadline is checked between item placements, also inside a permutation, so the solver stops within one placement of it.
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -177,7 +211,8 @@ bb := solver.NewBranchBound(func() placement.Engine {
     return placement.NewPivotEngine()
 })
 
-// Returns best result found within 100ms
+// Returns the best result found within 100ms; err is
+// context.DeadlineExceeded if the search did not finish.
 result, err := bb.Solve(ctx, bins, items)
 ```
 
@@ -250,11 +285,13 @@ The solver picks the best result using two criteria (in order):
 
 The Parallel solver's total time is bounded by the **slowest** configuration:
 
-- With default configs: ~17ms (bottlenecked by ExtremePoints)
-- Without ExtremePoints: ~1.5ms (bottlenecked by Pivot)
-- LAFF-only configs: <0.5ms
+- With default configs: ~1.8ms for 50 items (bottlenecked by ExtremePoints)
+- Without ExtremePoints: ~0.1ms (bottlenecked by Pivot)
+- LAFF-only configs: <0.1ms
 
-Memory usage is the **sum** of all configurations since they run concurrently. With default configs, ~975KB total.
+Memory usage is the **sum** of all configurations since they run concurrently. With default configs, ~740KB total.
+
+When two configurations tie, the one listed first wins, so the result does not depend on which goroutine finishes first.
 
 ### Example
 
@@ -364,11 +401,11 @@ All benchmarks run on AMD Ryzen 9 9950X3D:
 
 | Solver | Scenario | Time | Memory | Allocs |
 |---|---|---|---|---|
-| TrialPacking | 20 items, 3 bin types | ~70µs | 74KB | 471 |
-| TrialPacking (lookahead) | 20 items, 3 bin types | ~97µs | 65KB | 416 |
-| Metaheuristic | 17 items, 4 bin types | ~30ms | 49MB | 443K |
-| Metaheuristic | 20 items, 3 bin types | ~110µs | 179KB | 2.2K |
-| BB Fast | 6 items | ~5.3µs | 6.6KB | 77 |
-| BB Fast | 8 items | ~10.6µs | 9.9KB | 111 |
-| BB Full | 6 items | ~5.2µs | 6.6KB | 77 |
-| Parallel (5 configs) | 50 items | ~17ms | 975KB | 6.6K |
+| TrialPacking | 20 items, 3 bin types | ~84µs | 70KB | 471 |
+| TrialPacking (lookahead) | 20 items, 3 bin types | ~58µs | 50KB | 306 |
+| Metaheuristic | 17 items, 4 bin types | ~34ms | 46MB | 441K |
+| Metaheuristic | 20 items, 3 bin types | ~120µs | 176KB | 2.2K |
+| BB Fast | 6 items | ~2.6µs | 5.8KB | 51 |
+| BB Fast | 8 items | ~4.0µs | 8.2KB | 62 |
+| BB Full | 6 items | ~2.6µs | 5.8KB | 51 |
+| Parallel (5 configs) | 50 items | ~1.8ms | 739KB | 3.0K |

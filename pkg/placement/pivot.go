@@ -7,6 +7,7 @@ import (
 
 // Verify interface compliance.
 var _ Engine = (*PivotEngine)(nil)
+var _ Resetter = (*PivotEngine)(nil)
 
 // PivotEngine places items using pivot points generated from corners of placed items.
 type PivotEngine struct {
@@ -70,7 +71,6 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	ratio := e.supportRatio
 
 	// Conflict-driven rejection: track recent blockers' AABBs on stack.
-	data := bin.AABBData
 	const maxBlockers = 4
 	var blockers [maxBlockers][6]float64
 	nBlockers := 0
@@ -107,8 +107,8 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 			blocker := canPlaceDimBlocker(bin, item, dim, stab, ratio)
 			if blocker >= 0 {
-				off := blocker * 6
-				blockers[writeIdx] = [6]float64{data[off], data[off+1], data[off+2], data[off+3], data[off+4], data[off+5]}
+				lo, hi := bin.Box(blocker)
+				blockers[writeIdx] = [6]float64{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]}
 				writeIdx = (writeIdx + 1) & (maxBlockers - 1)
 				if nBlockers < maxBlockers {
 					nBlockers++
@@ -138,6 +138,9 @@ func (e *PivotEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 	return false
 }
 
+// Reset is a no-op: the pivot engine keeps no per-bin state.
+func (e *PivotEngine) Reset() {}
+
 // generatePivots returns candidate positions from corners of placed items.
 func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {
 	needed := 1 + 3*len(bin.Items)
@@ -147,12 +150,12 @@ func (e *PivotEngine) generatePivots(bin *model.Bin) [][3]float64 {
 	e.pivotBuf = e.pivotBuf[:1]
 	e.pivotBuf[0] = [3]float64{0, 0, 0}
 
-	for _, placed := range bin.Items {
-		d := placed.PlacedDim
+	for k := range bin.Items {
+		lo, hi := bin.Box(k)
 		e.pivotBuf = append(e.pivotBuf,
-			[3]float64{placed.Position[0] + d[0], placed.Position[1], placed.Position[2]},
-			[3]float64{placed.Position[0], placed.Position[1] + d[1], placed.Position[2]},
-			[3]float64{placed.Position[0], placed.Position[1], placed.Position[2] + d[2]},
+			[3]float64{hi[0], lo[1], lo[2]},
+			[3]float64{lo[0], hi[1], lo[2]},
+			[3]float64{lo[0], lo[1], hi[2]},
 		)
 	}
 	return e.pivotBuf

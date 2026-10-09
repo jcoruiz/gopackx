@@ -4,39 +4,42 @@ This guide covers benchmark data, engine selection, scaling behavior, and practi
 
 ## Benchmark Results
 
-All benchmarks were run on an **AMD Ryzen 9 9950X3D** (16-core), using **50 items** packed into **3 bins of 100x100x100** with the BestFitDecreasing strategy.
+All benchmarks were run on an **AMD Ryzen 9 9950X3D** (16-core) with Go 1.22, using the benchmarks in `pkg/packer` (50 items, BestFitDecreasing) and `pkg/solver`. v0.3.0 numbers; the v0.2 column is the same benchmark on v0.2.2.
 
 ### Placement Engines
 
-| Engine | Time/op | Allocs/op | Memory/op |
-|---|---|---|---|
-| LAFF-Fast | 0.25ms | 377 | 115KB |
-| LAFF | 0.38ms | 400 | 170KB |
-| Pivot | 1.5ms | 1,991 | 192KB |
-| ExtremePoints | 17ms | 1,827 | 304KB |
+| Engine | Time/op | v0.2 | Allocs/op | Memory/op |
+|---|---|---|---|---|
+| LAFF | 0.08ms | 0.09ms | 423 | 186KB |
+| LAFF-Fast | 0.08ms | 0.06ms | 390 | 128KB |
+| Pivot | 0.10ms | 0.08ms | 336 | 33KB |
+| ExtremePoints | 1.4ms | 4.3ms | 1,901 | 386KB |
+| MaxRects | 4.0ms | 0.08ms* | 675 | 286KB |
+
+\* v0.2 MaxRects was fast because it lost most of its free spaces and placed far fewer items (79 of 400 in a pallet that holds them all).
 
 Key observations:
 
-- LAFF-Fast is **6x faster** than Pivot and **68x faster** than ExtremePoints
-- LAFF variants use far fewer allocations (377-400 vs ~1900)
-- ExtremePoints uses the most memory but fewer allocations than Pivot (larger individual allocations)
-- Pivot offers a middle ground in all metrics
+- LAFF, LAFF-Fast and Pivot pack 50 items in about a tenth of a millisecond
+- ExtremePoints and MaxRects are 14-40x slower and pack denser
+- Pivot and LAFF-Fast are slightly slower than in v0.2: placement now also checks that a fragile or load-limited item is not slid under items placed earlier, and the Packer packs copies of your items
+- ExtremePoints got faster, and scales much better: with TrialPacking, 800 items take about 2 seconds instead of 9 minutes (Apple M4 Pro)
 
 ### Solvers
 
 | Solver | Items | Time/op | Allocs/op | Memory/op |
 |---|---|---|---|---|
-| BB Fast | 6 | 5.3us | 77 | 6.6KB |
-| BB Fast | 8 | 10.6us | 111 | 9.9KB |
-| BB Full | 6 | 5.2us | 77 | 6.6KB |
-| Parallel (default 5 configs) | 50 | 17ms | 6,551 | 975KB |
+| BB Fast | 6 | 2.6us | 51 | 5.8KB |
+| BB Fast | 8 | 4.0us | 62 | 8.2KB |
+| BB Full | 6 | 2.6us | 51 | 5.8KB |
+| Parallel (default 5 configs) | 50 | 1.8ms | 3,042 | 739KB |
 
 Key observations:
 
 - Branch & Bound is extremely fast for small item sets (microseconds)
 - BB Fast and BB Full have similar performance for 6 items -- the greedy seed already finds a good solution
-- BB Fast scales to 8 items at ~2x the cost of 6 items (but grows factorially beyond that)
-- Parallel solver time equals the slowest config (~17ms = ExtremePoints bottleneck)
+- BB Fast grows factorially beyond 8 items: use a deadline
+- Parallel solver time equals the slowest config (ExtremePoints)
 - Parallel memory is roughly the sum of all configs running concurrently
 
 ## Choosing the Right Engine
@@ -45,13 +48,13 @@ Key observations:
 What is your primary concern?
   |
   +-- Throughput (process many packing operations)
-  |     -> LAFF-Fast (~0.25ms per pack)
+  |     -> LAFF or LAFF-Fast (~0.08ms per pack)
   |
   +-- Balanced speed and quality
-  |     -> Pivot (~1.5ms per pack) -- the default
+  |     -> Pivot (~0.1ms per pack) -- the default
   |
   +-- Best possible packing quality
-  |     -> ExtremePoints (~17ms per pack)
+  |     -> ExtremePoints (~1.4ms per pack) or MaxRects (~4ms)
   |
   +-- Not sure / depends on data
         -> Parallel solver (tries all, picks best)
@@ -62,6 +65,7 @@ What is your primary concern?
 ```
 Quality  ^
          |  * ExtremePoints
+         |  * MaxRects
          |
          |        * Pivot
          |
@@ -71,7 +75,7 @@ Quality  ^
             Fast                Slow
 ```
 
-ExtremePoints produces the densest packing because it generates more candidate positions (intersection points between items) and uses multi-criteria scoring. Pivot uses simpler corner-based candidates. LAFF sacrifices inter-level optimization for speed.
+ExtremePoints produces the densest packing because it generates more candidate positions (intersection points between items) and uses multi-criteria scoring. MaxRects comes close by tracking the maximal free spaces. Pivot uses simpler corner-based candidates. LAFF sacrifices inter-level optimization for speed.
 
 ## Scaling Considerations
 
@@ -86,8 +90,15 @@ Each new item generates 3 pivot points per placed item. Each candidate position 
 
 After each placement, all extreme points have their `MaxSpace` recalculated against all placed items. Point generation also checks intersections with all items.
 
-- **Sweet spot**: under 100 items
-- **Degrades at**: 100+ items (point maintenance becomes expensive)
+- **Sweet spot**: up to a few hundred items per bin
+- **Degrades at**: about a thousand items in one bin (the point list grows with every item)
+
+### MaxRects Engine -- O(n * spaces)
+
+Each placement tries every free space with every rotation, and splits the spaces the new item overlaps.
+
+- **Sweet spot**: up to a few hundred items per bin
+- **Degrades at**: many small items in one large bin (the number of free spaces grows)
 
 ### LAFF Engine -- O(n * levels)
 
@@ -120,27 +131,20 @@ The solver returns the best solution found before the deadline.
 
 ## Context and Timeouts
 
-All packing operations (`Packer.Pack`, `Solver.Solve`) accept a `context.Context` and check for cancellation at each item placement.
+All packing operations (`gopackx.Pack`, `Packer.Pack`, `Solver.Solve`) accept a `context.Context` and check it between item placements, so they stop within one placement of the deadline.
+
+When the context ends before they finish, they return the **best result found so far together with the context error**. Every item is in the result, placed or in `UnfittedItems`. When they finish in time, the error is nil.
 
 ```go
-// Standard packer with timeout
-ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 defer cancel()
-result, err := p.Pack(ctx)
-if err != nil {
-    // err == context.DeadlineExceeded if timeout hit
+result, err := bb.Solve(ctx, bins, items)
+if errors.Is(err, context.DeadlineExceeded) {
+    // result holds the best packing found in 100ms
 }
-
-// Branch & Bound with timeout
-ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-defer cancel()
-result, err = bb.Solve(ctx, bins, items)
-// result contains best solution found within the time budget, even if err != nil
 ```
 
-For the standard `Packer`, context cancellation stops the loop mid-way -- already-placed items stay placed, remaining items go to `UnfittedItems`.
-
-For Branch & Bound, cancellation stops the search and returns the best-so-far solution. This is the recommended way to use BB with larger item sets.
+Deadlines also work in WebAssembly (`GOOS=js`). There, the timer behind `context.WithTimeout` cannot fire while a solver keeps the only thread busy, so GoPackX compares the deadline with the clock as well. CI runs the test suite as WebAssembly to keep it that way.
 
 ## Memory Optimization
 
@@ -150,7 +154,7 @@ GoPackX has no external dependencies -- only Go's standard library. No hidden al
 
 ### Pointer-Based Items and Bins
 
-Items and bins are pointer types (`*Item`, `*Bin`). The packer works with pointer slices and does not copy item data during normal packing. Modification happens in-place (setting `Position`, `RotationType`, `Placed`).
+Items and bins are pointer types (`*Item`, `*Bin`). All entry points pack copies, so the bins and items you pass stay unchanged and the results are in `Result.Bins` and `Result.UnfittedItems`. Copying 50 items costs about 1% of a Pivot pack.
 
 ### Solver Deep Copies
 
@@ -163,8 +167,11 @@ Solvers (`Parallel`, `BranchBound`) internally deep-copy bins and items to ensur
 ### Engine State
 
 - **Pivot**: Stateless -- no per-bin state. Pivot points are generated fresh for each `PlaceItem` call.
-- **ExtremePoints**: Stateful -- maintains a list of candidate points per bin. Reinitializes when the bin pointer changes. Memory grows with item count.
-- **LAFF**: Stateful -- tracks levels per bin. Reinitializes when the bin pointer changes. Lightweight state.
+- **ExtremePoints**, **MaxRects**, **LAFF**: keep the state (points, free spaces, levels) of every bin they pack, so solvers can switch between open bins without rebuilding it. Memory grows with item count. Call `Reset()` before reusing an engine for an unrelated run; the Packer does it on every `Pack`.
+
+### Load Tracking
+
+Bins track the load on each item only once an item with a load limit is involved, so packing without load limits pays nothing for it.
 
 ## Practical Tips
 
@@ -187,7 +194,7 @@ ps := solver.NewParallel()
 result, _ := ps.Solve(ctx, bins, items)
 ```
 
-The ~17ms cost is negligible for most applications, and you get the benefit of 5 different approaches.
+The ~2ms cost for 50 items is negligible for most applications, and you get the benefit of 5 different approaches.
 
 ### Use LAFF-Fast for High Throughput
 
@@ -199,7 +206,7 @@ p := packer.NewPacker(
 )
 ```
 
-At 0.25ms per pack, you can process ~4,000 packing operations per second on a single core.
+At about 0.08ms per pack, you can process over 10,000 packing operations per second on a single core.
 
 ### Use Branch & Bound for Small Critical Sets
 
@@ -217,7 +224,7 @@ result, _ := bb.Solve(ctx, bins, items)
 
 ### Enable Stability Only When Needed
 
-Stability checking adds overhead because each placement must calculate support ratios and check load-bearing constraints:
+Stability checking adds overhead because each placement must calculate support ratios. (Load limits are checked whenever items have them, with or without stability.)
 
 ```go
 // Only enable if physical stability matters
@@ -249,7 +256,7 @@ ps := solver.NewParallel(
         strategy.BestFitDecreasing,
     ),
 )
-// Now bottlenecked by Pivot (~1.5ms) instead of ExtremePoints (~17ms)
+// Now bottlenecked by Pivot (~0.1ms) instead of ExtremePoints (~1.4ms)
 ```
 
 ### Profile Before Optimizing
