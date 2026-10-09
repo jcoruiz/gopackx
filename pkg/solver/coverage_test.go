@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -656,7 +657,10 @@ func TestCoverage_PackGreedy_ContextCancel(t *testing.T) {
 		model.NewItem("b", 10, 10, 10, 1),
 	})
 
-	result := packGreedy(ctx, engine, bins, items, strategy.BestFitDecreasing)
+	result, err := packGreedy(ctx, engine, bins, items, strategy.BestFitDecreasing)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
 	if len(result.UnfittedItems) != 2 {
 		t.Errorf("expected 2 unfitted with cancelled ctx, got %d", len(result.UnfittedItems))
 	}
@@ -1247,12 +1251,15 @@ func TestCoverage_OptimizeFast_ContextCancelDuringPerm(t *testing.T) {
 	}
 
 	result, err := bb.Solve(ctx, bins, items)
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
-	// Should return the seed result even with cancelled context.
+	// The best result so far comes back with the error, every item in it.
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+	if result.Stats.FittedItems+result.Stats.UnfittedCount != len(items) {
+		t.Errorf("stats %+v do not account for %d items", result.Stats, len(items))
 	}
 }
 
@@ -1274,11 +1281,14 @@ func TestCoverage_BranchBound_ContextCancel(t *testing.T) {
 	}
 
 	result, err := bb.Solve(ctx, bins, items)
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+	if result.Stats.UnfittedCount != 1 {
+		t.Errorf("unfitted = %d, want 1", result.Stats.UnfittedCount)
 	}
 }
 
@@ -2365,7 +2375,9 @@ func TestCoverage_DfsFull_Direct_CtxCancel(t *testing.T) {
 	// Cancel context before DFS.
 	cancel()
 
-	bb.dfsFull(ctx, bin, items, used, 0, best)
+	if err := bb.dfsFull(ctx, bin, items, used, 0, best); !errors.Is(err, context.Canceled) {
+		t.Errorf("dfsFull err = %v, want context.Canceled", err)
+	}
 	// Should return immediately due to ctx cancel, without placing anything.
 	if best.count != 0 {
 		t.Errorf("best.count = %d, want 0 after cancelled context", best.count)
@@ -2389,7 +2401,9 @@ func TestCoverage_DfsFull_Direct_CountPruning(t *testing.T) {
 	// depth+remaining = 3 <= best.count = 3 -> prune.
 	best := &singleBinResult{bin: bin, count: 3}
 
-	bb.dfsFull(context.Background(), bin, items, used, 0, best)
+	if err := bb.dfsFull(context.Background(), bin, items, used, 0, best); err != nil {
+		t.Fatal(err)
+	}
 	// Should prune immediately since we can't beat best.count=3 with depth+remaining=3.
 	if best.count != 3 {
 		t.Errorf("best.count = %d, want 3 (unchanged after pruning)", best.count)
@@ -2414,7 +2428,9 @@ func TestCoverage_DfsFull_Direct_OptimalEarlyReturn(t *testing.T) {
 	used := make([]bool, 2)
 	best := &singleBinResult{bin: bin, count: 0}
 
-	bb.dfsFull(context.Background(), bin, items, used, 0, best)
+	if err := bb.dfsFull(context.Background(), bin, items, used, 0, best); err != nil {
+		t.Fatal(err)
+	}
 	// Should find optimal (2) and return via the early return path.
 	if best.count != 2 {
 		t.Errorf("expected optimal count=2, got %d", best.count)

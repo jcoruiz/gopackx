@@ -574,7 +574,9 @@ func BenchmarkComparison_Greedy_vs_Trial(b *testing.B) {
 		for range b.N {
 			bins := makeBins()
 			items := makeItems()
-			packGreedy(context.Background(), newPivot(), bins, items, strategy.BestFitDecreasing)
+			if _, err := packGreedy(context.Background(), newPivot(), bins, items, strategy.BestFitDecreasing); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 

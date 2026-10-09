@@ -4,6 +4,7 @@ package packer
 import (
 	"context"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/strategy"
@@ -89,15 +90,12 @@ func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 	strategy.SortItems(items, p.strategy)
 
 	var unfitted []*model.Item
+	var stopped error
 
 	if p.strategy == strategy.NextFit {
-		unfitted = p.packNextFit(ctx, bins, items)
+		unfitted, stopped = p.packNextFit(ctx, bins, items)
 	} else {
-		unfitted = p.packStandard(ctx, bins, items)
-	}
-
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		unfitted, stopped = p.packStandard(ctx, bins, items)
 	}
 
 	result := &model.Result{
@@ -105,16 +103,15 @@ func (p *Packer) Pack(ctx context.Context) (*model.Result, error) {
 		UnfittedItems: unfitted,
 		Stats:         computeStats(bins, items, unfitted),
 	}
-	return result, nil
+	return result, stopped
 }
 
-func (p *Packer) packStandard(ctx context.Context, bins []*model.Bin, items []*model.Item) []*model.Item {
+func (p *Packer) packStandard(ctx context.Context, bins []*model.Bin, items []*model.Item) ([]*model.Item, error) {
 	var unfitted []*model.Item
 
-	for _, item := range items {
-		if ctx.Err() != nil {
-			unfitted = append(unfitted, item)
-			continue
+	for i, item := range items {
+		if err := deadline.Err(ctx); err != nil {
+			return append(unfitted, items[i:]...), err
 		}
 
 		placed := false
@@ -129,17 +126,16 @@ func (p *Packer) packStandard(ctx context.Context, bins []*model.Bin, items []*m
 			unfitted = append(unfitted, item)
 		}
 	}
-	return unfitted
+	return unfitted, nil
 }
 
-func (p *Packer) packNextFit(ctx context.Context, bins []*model.Bin, items []*model.Item) []*model.Item {
+func (p *Packer) packNextFit(ctx context.Context, bins []*model.Bin, items []*model.Item) ([]*model.Item, error) {
 	var unfitted []*model.Item
 	binIdx := 0
 
-	for _, item := range items {
-		if ctx.Err() != nil {
-			unfitted = append(unfitted, item)
-			continue
+	for i, item := range items {
+		if err := deadline.Err(ctx); err != nil {
+			return append(unfitted, items[i:]...), err
 		}
 
 		placed := false
@@ -154,7 +150,7 @@ func (p *Packer) packNextFit(ctx context.Context, bins []*model.Bin, items []*mo
 			unfitted = append(unfitted, item)
 		}
 	}
-	return unfitted
+	return unfitted, nil
 }
 
 func computeStats(bins []*model.Bin, allItems, unfitted []*model.Item) model.PackingStats {

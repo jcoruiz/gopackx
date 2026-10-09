@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 )
@@ -82,8 +83,8 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	if err != nil {
 		return seedResult, err
 	}
-	if ctx.Err() != nil {
-		return seedResult, nil
+	if err := deadline.Err(ctx); err != nil {
+		return seedResult, err
 	}
 
 	// Convert to abstract solution.
@@ -92,9 +93,10 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 
 	ops := []neighborhoodOp{opMove, opSwap, opRepack, opChangeType}
 	noImprove := 0
+	var stopped error
 
 	for iter := 0; iter < m.maxIter && noImprove < m.maxNoImprove; iter++ {
-		if ctx.Err() != nil {
+		if stopped = deadline.Err(ctx); stopped != nil {
 			break
 		}
 
@@ -102,7 +104,7 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		k := 0
 
 		for k < len(ops) {
-			if ctx.Err() != nil {
+			if stopped = deadline.Err(ctx); stopped != nil {
 				break
 			}
 
@@ -146,7 +148,7 @@ func (m *Metaheuristic) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	}
 
 	// Materialize the best solution into a Result.
-	return m.materialize(best, items, bins), nil
+	return m.materialize(best, items, bins), stopped
 }
 
 // shake applies a neighborhood operator to generate a candidate solution.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/strategy"
@@ -72,6 +73,7 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 
 	type entry struct {
 		res *model.Result
+		err error
 	}
 
 	results := make(chan entry, len(p.configs))
@@ -90,8 +92,8 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 			itemsCopy := resetItems(items)
 
 			engine := cfg.NewEngine()
-			res := packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
-			results <- entry{res}
+			res, err := packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
+			results <- entry{res, err}
 		}()
 	}
 
@@ -100,22 +102,19 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 		close(results)
 	}()
 
+	// Every configuration sends a result, so best is never nil. If the
+	// context ended, some configurations stopped early: report it.
 	var best *model.Result
+	var stopped error
 	for r := range results {
+		if r.err != nil {
+			stopped = r.err
+		}
 		if isBetter(r.res, best) {
 			best = r.res
 		}
 	}
-
-	if best == nil {
-		return &model.Result{
-			Bins:          bins,
-			UnfittedItems: items,
-			Stats:         computeStats(bins, items, items),
-		}, ctx.Err()
-	}
-
-	return best, nil
+	return best, stopped
 }
 
 func isBetter(a, b *model.Result) bool {
@@ -129,14 +128,16 @@ func isBetter(a, b *model.Result) bool {
 }
 
 // packGreedy packs items into bins using the given engine and strategy.
-func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin, items []*model.Item, st strategy.Type) *model.Result {
+// It stops early, with the remaining items unfitted, when the context ends.
+func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin, items []*model.Item, st strategy.Type) (*model.Result, error) {
 	strategy.SortItems(items, st)
 
 	var unfitted []*model.Item
-	for _, item := range items {
-		if ctx.Err() != nil {
-			unfitted = append(unfitted, item)
-			continue
+	var stopped error
+	for i, item := range items {
+		if stopped = deadline.Err(ctx); stopped != nil {
+			unfitted = append(unfitted, items[i:]...)
+			break
 		}
 
 		placed := false
@@ -156,5 +157,5 @@ func packGreedy(ctx context.Context, engine placement.Engine, bins []*model.Bin,
 		Bins:          bins,
 		UnfittedItems: unfitted,
 		Stats:         computeStats(bins, items, unfitted),
-	}
+	}, stopped
 }

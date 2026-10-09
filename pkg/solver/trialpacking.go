@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/jcoruiz/gopackx/internal/deadline"
 	"github.com/jcoruiz/gopackx/pkg/model"
 	"github.com/jcoruiz/gopackx/pkg/placement"
 	"github.com/jcoruiz/gopackx/pkg/strategy"
@@ -77,8 +78,9 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 	var unfitted []*model.Item
 	engine := tp.newEngine()
 
+	var stopped error
 	for len(remaining) > 0 {
-		if ctx.Err() != nil {
+		if stopped = deadline.Err(ctx); stopped != nil {
 			unfitted = append(unfitted, remaining...)
 			break
 		}
@@ -131,7 +133,7 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		UnfittedItems: unfitted,
 		Stats:         computeStats(openBins, items, unfitted),
 	}
-	return result, ctx.Err()
+	return result, stopped
 }
 
 // trialScore holds the outcome of simulating packing into a candidate bin type.
@@ -149,11 +151,11 @@ func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin
 	best := trialScore{binTypeIdx: -1}
 
 	for i, bt := range binTypes {
-		if ctx.Err() != nil {
+		if deadline.Err(ctx) != nil {
 			break
 		}
 
-		score := tp.runTrial(bt, remaining, i)
+		score := tp.runTrial(ctx, bt, remaining, i)
 
 		if score.fittedCount == 0 {
 			continue
@@ -177,12 +179,17 @@ func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin
 // runTrial simulates packing remaining items into a fresh bin of the given type.
 // The first item in remaining is the one that must be placed; if it doesn't fit,
 // the trial is considered non-viable (fittedCount = 0).
-func (tp *TrialPacking) runTrial(binType *model.Bin, remaining []*model.Item, typeIdx int) trialScore {
+func (tp *TrialPacking) runTrial(ctx context.Context, binType *model.Bin, remaining []*model.Item, typeIdx int) trialScore {
 	trialBin := cloneBinEmpty(binType)
 	trialItems := resetItems(remaining)
 	trialEngine := tp.newEngine()
 
-	for _, item := range trialItems {
+	for i, item := range trialItems {
+		// A trial cut short still scores the items placed so far; the
+		// caller stops right after.
+		if i > 0 && deadline.Err(ctx) != nil {
+			break
+		}
 		trialEngine.PlaceItem(trialBin, item)
 	}
 
