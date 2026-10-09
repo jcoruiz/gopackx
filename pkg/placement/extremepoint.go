@@ -27,8 +27,11 @@ type ExtremePointEngine struct {
 	keys   map[[3]int64]struct{} // positions of points, to skip duplicates
 	bin    *model.Bin
 	// items are the bin's items the points are computed against: all of
-	// them while packing, the ones placed so far while rebuilding.
+	// them while packing, the ones placed so far while rebuilding. boxes
+	// holds their corners (x0, y0, z0, x1, y1, z1 each), a compact copy
+	// for the hot loops.
 	items           []*model.Item
+	boxes           []float64
 	saved           binStates[epState]
 	enableStability bool
 	supportRatio    float64
@@ -38,6 +41,7 @@ type ExtremePointEngine struct {
 type epState struct {
 	points []*ExtremePoint
 	keys   map[[3]int64]struct{}
+	boxes  []float64
 }
 
 // ExtremePointOption configures the ExtremePointEngine.
@@ -142,7 +146,7 @@ func scorePlacement(ep *ExtremePoint, dims [3]float64) float64 {
 // engine for an unrelated packing run; packer.Packer does it on each Pack.
 func (e *ExtremePointEngine) Reset() {
 	e.bin = nil
-	e.points, e.keys, e.items = nil, nil, nil
+	e.points, e.keys, e.items, e.boxes = nil, nil, nil, nil
 	e.saved.reset()
 }
 
@@ -150,10 +154,10 @@ func (e *ExtremePointEngine) Reset() {
 // rebuilding them only if this engine has not seen bin in its current state.
 func (e *ExtremePointEngine) switchBin(bin *model.Bin) {
 	if e.bin != nil {
-		e.saved.save(e.bin, epState{e.points, e.keys})
+		e.saved.save(e.bin, epState{e.points, e.keys, e.boxes})
 	}
 	if st, ok := e.saved.load(bin); ok {
-		e.bin, e.items, e.points, e.keys = bin, bin.Items, st.points, st.keys
+		e.bin, e.items, e.points, e.keys, e.boxes = bin, bin.Items, st.points, st.keys, st.boxes
 		return
 	}
 	e.initBin(bin)
@@ -168,6 +172,7 @@ func (e *ExtremePointEngine) initBin(bin *model.Bin) {
 	}
 	e.points = []*ExtremePoint{origin}
 	e.keys = map[[3]int64]struct{}{pointKey(origin.Pos): {}}
+	e.boxes = nil
 
 	// Rebuild points from items already in the bin, replaying them in order
 	// so the result is the same as if this engine had placed them.
@@ -180,6 +185,8 @@ func (e *ExtremePointEngine) initBin(bin *model.Bin) {
 
 func (e *ExtremePointEngine) onItemPlaced(item *model.Item) {
 	dim := item.Dimension()
+	lo, hi := e.bin.Box(len(e.items) - 1)
+	e.boxes = append(e.boxes, lo[0], lo[1], lo[2], hi[0], hi[1], hi[2])
 
 	e.removePointsInside(item, dim)
 
@@ -233,11 +240,9 @@ func (e *ExtremePointEngine) generatePoints(item *model.Item, dim [3]float64) {
 	)
 
 	// Interaction points: where existing items' faces intersect with the new item.
-	for k, placed := range e.items {
-		if placed == item {
-			continue
-		}
-		pp, phi := e.bin.Box(k)
+	// Every placed item but the new one, which is last.
+	for o := e.boxes[:len(e.boxes)-6]; len(o) >= 6; o = o[6:] {
+		pp, phi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 
 		// Existing item's right face cuts through new item's X range.
 		rightX := phi[0]
@@ -325,8 +330,8 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 	}
 
 	bestY := 0.0
-	for k := range e.items {
-		lo, hi := e.bin.Box(k)
+	for o := e.boxes; len(o) >= 6; o = o[6:] {
+		lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 		itemTop := hi[1]
 
 		if pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
@@ -341,8 +346,8 @@ func (e *ExtremePointEngine) projectDown(pos [3]float64) [3]float64 {
 }
 
 func (e *ExtremePointEngine) isInsideAnyItem(pos [3]float64) bool {
-	for k := range e.items {
-		lo, hi := e.bin.Box(k)
+	for o := e.boxes; len(o) >= 6; o = o[6:] {
+		lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 		if pos[0] > lo[0]+epsilon &&
 			pos[0] < hi[0]-epsilon &&
 			pos[1] > lo[1]+epsilon &&
@@ -373,8 +378,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[1] < epsilon {
 		support++
 	} else {
-		for k := range e.items {
-			lo, hi := e.bin.Box(k)
+		for o := e.boxes; len(o) >= 6; o = o[6:] {
+			lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 			itemTop := hi[1]
 			if math.Abs(pos[1]-itemTop) < epsilon &&
 				pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
@@ -389,8 +394,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[0] < epsilon {
 		support++
 	} else {
-		for k := range e.items {
-			lo, hi := e.bin.Box(k)
+		for o := e.boxes; len(o) >= 6; o = o[6:] {
+			lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 			itemRight := hi[0]
 			if math.Abs(pos[0]-itemRight) < epsilon &&
 				pos[1] >= lo[1]-epsilon && pos[1] < hi[1]+epsilon &&
@@ -405,8 +410,8 @@ func (e *ExtremePointEngine) countSupport(pos [3]float64) int {
 	if pos[2] < epsilon {
 		support++
 	} else {
-		for k := range e.items {
-			lo, hi := e.bin.Box(k)
+		for o := e.boxes; len(o) >= 6; o = o[6:] {
+			lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 			itemBack := hi[2]
 			if math.Abs(pos[2]-itemBack) < epsilon &&
 				pos[0] >= lo[0]-epsilon && pos[0] < hi[0]+epsilon &&
@@ -482,8 +487,8 @@ func (e *ExtremePointEngine) calculateMaxSpace(ep *ExtremePoint) {
 		e.bin.Depth - ep.Pos[2],
 	}
 
-	for k := range e.items {
-		lo, hi := e.bin.Box(k)
+	for o := e.boxes; len(o) >= 6; o = o[6:] {
+		lo, hi := [3]float64{o[0], o[1], o[2]}, [3]float64{o[3], o[4], o[5]}
 
 		// Width: item to the right, point within item's Y-Z cross-section.
 		if lo[0] > ep.Pos[0]-epsilon &&
