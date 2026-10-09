@@ -70,6 +70,10 @@ func canPlaceDim(bin *model.Bin, item *model.Item, dim [3]float64, enableStabili
 		}
 	}
 
+	if !limitsOwnLoad(bin, item, dim, enableStability) {
+		return false
+	}
+
 	if enableStability {
 		if !stability.CheckSupport(item, bin.Items, supportRatio) {
 			return false
@@ -88,6 +92,42 @@ func canPlaceDim(bin *model.Bin, item *model.Item, dim [3]float64, enableStabili
 	}
 
 	return true
+}
+
+// onTop reports whether any placed item rests on the candidate's top face and
+// how much weight it puts there (each item above shared by contact area). A
+// fragile or load-limited candidate can be slid under an item placed earlier,
+// so its own limits must be checked as well as those of the items below it.
+func onTop(bin *model.Bin, iPos, dim [3]float64) (contact bool, weight float64) {
+	top := iPos[1] + dim[1]
+	data := bin.AABBData
+	for k, other := range bin.Items {
+		off := k * 6
+		if math.Abs(data[off+1]-top) > epsilon {
+			continue
+		}
+		ow := overlapLen(iPos[0], dim[0], data[off], data[off+3]-data[off])
+		od := overlapLen(iPos[2], dim[2], data[off+2], data[off+5]-data[off+2])
+		if ow > epsilon && od > epsilon {
+			contact = true
+			if base := (data[off+3] - data[off]) * (data[off+5] - data[off+2]); base > epsilon {
+				weight += other.Weight * ow * od / base
+			}
+		}
+	}
+	return contact, weight
+}
+
+// limitsOwnLoad checks the candidate's own fragile and load-bearing limits.
+func limitsOwnLoad(bin *model.Bin, item *model.Item, dim [3]float64, enableStability bool) bool {
+	if len(bin.Items) == 0 || !(item.Fragile || (enableStability && item.LoadBear > 0)) {
+		return true
+	}
+	contact, w := onTop(bin, item.Position, dim)
+	if item.Fragile && contact {
+		return false
+	}
+	return !(enableStability && item.LoadBear > 0 && w > item.LoadBear+epsilon)
 }
 
 // canPlaceDimBlocker is like canPlaceDim but returns the index of the blocking item
@@ -139,6 +179,10 @@ func canPlaceDimBlocker(bin *model.Bin, item *model.Item, dim [3]float64, enable
 				}
 			}
 		}
+	}
+
+	if !limitsOwnLoad(bin, item, dim, enableStability) {
+		return -2
 	}
 
 	if enableStability {
