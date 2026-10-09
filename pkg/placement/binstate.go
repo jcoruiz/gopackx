@@ -18,13 +18,12 @@ type binStates[T any] struct {
 
 type savedState[T any] struct {
 	state T
-	n     int         // len(bin.Items) when saved
-	last  *model.Item // last item in the bin when saved
-	used  uint64      // clock value of the last save
+	rev   uint64 // bin revision the state matches
+	used  uint64 // clock value of the last save
 }
 
-// save stores the state of bin as it is now.
-func (c *binStates[T]) save(bin *model.Bin, state T) {
+// save stores state, which matches revision rev of bin.
+func (c *binStates[T]) save(bin *model.Bin, state T, rev uint64) {
 	if c.m == nil {
 		c.m = make(map[*model.Bin]savedState[T])
 	}
@@ -32,11 +31,7 @@ func (c *binStates[T]) save(bin *model.Bin, state T) {
 		c.evictOldest()
 	}
 	c.clock++
-	s := savedState[T]{state: state, n: len(bin.Items), used: c.clock}
-	if s.n > 0 {
-		s.last = bin.Items[s.n-1]
-	}
-	c.m[bin] = s
+	c.m[bin] = savedState[T]{state: state, rev: rev, used: c.clock}
 }
 
 func (c *binStates[T]) evictOldest() {
@@ -55,11 +50,11 @@ func (c *binStates[T]) reset() {
 	c.m = nil
 }
 
-// load returns the saved state of bin if the bin has not changed since it
-// was saved by this engine.
+// load returns the saved state of bin if it matches the bin's current
+// revision, that is, if nothing was placed in or removed from the bin since.
 func (c *binStates[T]) load(bin *model.Bin) (T, bool) {
 	s, ok := c.m[bin]
-	if !ok || s.n != len(bin.Items) || (s.n > 0 && bin.Items[s.n-1] != s.last) {
+	if !ok || s.rev != bin.Revision() {
 		var zero T
 		return zero, false
 	}

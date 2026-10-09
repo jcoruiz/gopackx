@@ -32,6 +32,7 @@ type ExtremePointEngine struct {
 	// for the hot loops.
 	items           []*model.Item
 	boxes           []float64
+	rev             uint64 // bin revision the state matches
 	saved           binStates[epState]
 	enableStability bool
 	supportRatio    float64
@@ -68,7 +69,7 @@ func NewExtremePointEngine(opts ...ExtremePointOption) *ExtremePointEngine {
 // It evaluates all candidate points and rotations, selecting the best placement
 // based on support, position, and fit quality.
 func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	if e.bin != bin {
+	if e.bin != bin || e.rev != bin.Revision() {
 		e.switchBin(bin)
 	}
 
@@ -130,6 +131,7 @@ func (e *ExtremePointEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
 
 	e.items = bin.Items
 	e.onItemPlaced(item)
+	e.rev = bin.Revision()
 	return true
 }
 
@@ -153,11 +155,13 @@ func (e *ExtremePointEngine) Reset() {
 // switchBin saves the points of the current bin and restores those of bin,
 // rebuilding them only if this engine has not seen bin in its current state.
 func (e *ExtremePointEngine) switchBin(bin *model.Bin) {
-	if e.bin != nil {
-		e.saved.save(e.bin, epState{e.points, e.keys, e.boxes})
+	// A state for a bin that changed behind the engine's back is dropped.
+	if e.bin != nil && e.bin != bin {
+		e.saved.save(e.bin, epState{e.points, e.keys, e.boxes}, e.rev)
 	}
 	if st, ok := e.saved.load(bin); ok {
 		e.bin, e.items, e.points, e.keys, e.boxes = bin, bin.Items, st.points, st.keys, st.boxes
+		e.rev = bin.Revision()
 		return
 	}
 	e.initBin(bin)
@@ -181,6 +185,7 @@ func (e *ExtremePointEngine) initBin(bin *model.Bin) {
 		e.onItemPlaced(item)
 	}
 	e.items = bin.Items
+	e.rev = bin.Revision()
 }
 
 func (e *ExtremePointEngine) onItemPlaced(item *model.Item) {

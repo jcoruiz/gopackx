@@ -99,10 +99,10 @@ func TestBinStatesEvictsLeastRecentlyUsed(t *testing.T) {
 		bins[i] = model.NewBin(strconv.Itoa(i), 1, 1, 1, 1)
 	}
 	for i := range maxBinStates {
-		c.save(bins[i], i)
+		c.save(bins[i], i, bins[i].Revision())
 	}
-	c.save(bins[0], 0) // bins[0] used again: bins[1] is now the oldest
-	c.save(bins[maxBinStates], maxBinStates)
+	c.save(bins[0], 0, bins[0].Revision()) // bins[0] used again: bins[1] is now the oldest
+	c.save(bins[maxBinStates], maxBinStates, bins[maxBinStates].Revision())
 	if _, ok := c.load(bins[1]); ok {
 		t.Error("least recently used bin should have been forgotten")
 	}
@@ -111,5 +111,37 @@ func TestBinStatesEvictsLeastRecentlyUsed(t *testing.T) {
 	}
 	if len(c.m) != maxBinStates {
 		t.Errorf("cache holds %d bins, want %d", len(c.m), maxBinStates)
+	}
+}
+
+// An engine whose bin changed behind its back (items removed) must not keep
+// using, or save, state that no longer matches the bin.
+func TestEngineStateFollowsRemovedItems(t *testing.T) {
+	for name, newEngine := range engineFactories {
+		t.Run(name, func(t *testing.T) {
+			cube := func() *model.Item { return model.NewItem("cube", 1, 1, 1, 1) }
+
+			// Same bin: place, remove, place again.
+			e := newEngine()
+			a := model.NewBin("a", 1, 1, 1, 0)
+			if !e.PlaceItem(a, cube()) {
+				t.Fatal("first cube not placed")
+			}
+			a.RemoveLastItem()
+			if !e.PlaceItem(a, cube()) {
+				t.Error("the bin is empty again, but the engine still saw it full")
+			}
+
+			// Switching away after the removal and coming back.
+			e = newEngine()
+			a = model.NewBin("a", 1, 1, 1, 0)
+			b := model.NewBin("b", 1, 1, 1, 0)
+			e.PlaceItem(a, cube())
+			a.RemoveLastItem()
+			e.PlaceItem(b, cube())
+			if !e.PlaceItem(a, cube()) {
+				t.Error("after switching back, the engine restored state from before the removal")
+			}
+		})
 	}
 }

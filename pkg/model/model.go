@@ -182,6 +182,7 @@ type Bin struct {
 	volume  float64     // sum of item volumes
 	boxes   []float64   // per item: x0, y0, z0, x1, y1, z1
 	fragile []int       // indexes of fragile items
+	rev     uint64      // changes whenever an item is placed or removed
 	limited int         // number of items with a load limit
 	tracked bool        // loads and loadLog are kept for every item
 	loads   []float64   // per item: weight resting on it, everything above counted
@@ -252,6 +253,7 @@ func (b *Bin) Clone() *Bin {
 // and updates the tracked weight, volume and loads. It does not check that
 // the item fits: placement engines do.
 func (b *Bin) PlaceItem(item *Item) {
+	b.rev++
 	item.Placed = true
 	dim := item.Dimension()
 	lo := item.Position
@@ -312,6 +314,7 @@ func (b *Bin) trackLoads() {
 
 // RemoveLastItem removes the last placed item and updates tracked weight/volume.
 func (b *Bin) RemoveLastItem() *Item {
+	b.rev++
 	n := len(b.Items)
 	item := b.Items[n-1]
 	if b.tracked {
@@ -333,6 +336,13 @@ func (b *Bin) RemoveLastItem() *Item {
 	}
 	item.Placed = false
 	return item
+}
+
+// Revision changes every time an item is placed in or removed from the bin.
+// Placement engines use it to tell whether the state they keep for the bin
+// is still current.
+func (b *Bin) Revision() uint64 {
+	return b.rev
 }
 
 // Box returns the corners of the space taken by item i: lo is the corner

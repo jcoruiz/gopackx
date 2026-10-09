@@ -24,6 +24,7 @@ type MaxRectsEngine struct {
 	spaces          []freeSpace
 	bin             *model.Bin
 	saved           binStates[[]freeSpace]
+	rev             uint64              // bin revision the spaces match
 	candidates      []maxRectsCandidate // reused between calls
 	enableStability bool
 	supportRatio    float64
@@ -68,11 +69,12 @@ func (e *MaxRectsEngine) Reset() {
 // switchBin saves the free spaces of the current bin and restores those of
 // bin, rebuilding them only if this engine has not seen bin as it is now.
 func (e *MaxRectsEngine) switchBin(bin *model.Bin) {
-	if e.bin != nil {
-		e.saved.save(e.bin, e.spaces)
+	// A state for a bin that changed behind the engine's back is dropped.
+	if e.bin != nil && e.bin != bin {
+		e.saved.save(e.bin, e.spaces, e.rev)
 	}
 	if spaces, ok := e.saved.load(bin); ok {
-		e.bin, e.spaces = bin, spaces
+		e.bin, e.spaces, e.rev = bin, spaces, bin.Revision()
 		return
 	}
 	e.initBin(bin)
@@ -90,13 +92,14 @@ func (e *MaxRectsEngine) initBin(bin *model.Bin) {
 	for k := range bin.Items {
 		e.splitSpaces(bin.Box(k))
 	}
+	e.rev = bin.Revision()
 }
 
 // PlaceItem attempts to place an item using maximal rectangles with gravity.
 // Candidate spots are tried from the best score down until one passes the
 // full placement check (overlap, fragile items, load limits, stability).
 func (e *MaxRectsEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	if e.bin != bin {
+	if e.bin != bin || e.rev != bin.Revision() {
 		e.switchBin(bin)
 	}
 
@@ -201,6 +204,7 @@ func (e *MaxRectsEngine) tryCandidate(bin *model.Bin, item *model.Item, c maxRec
 	}
 	bin.PlaceItem(item)
 	e.splitSpaces(bin.Box(len(bin.Items) - 1))
+	e.rev = bin.Revision()
 	return true
 }
 

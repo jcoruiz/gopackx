@@ -24,6 +24,7 @@ type LAFFEngine struct {
 	bin             *model.Bin
 	levels          []laffLevel
 	saved           binStates[[]laffLevel]
+	rev             uint64 // bin revision the levels match
 	enableStability bool
 	supportRatio    float64
 	fast            bool // fast variant: 2D-only placement within levels
@@ -56,7 +57,7 @@ func NewLAFFEngine(opts ...LAFFOption) *LAFFEngine {
 
 // PlaceItem attempts to place an item within existing levels or by creating a new one.
 func (e *LAFFEngine) PlaceItem(bin *model.Bin, item *model.Item) bool {
-	if e.bin != bin {
+	if e.bin != bin || e.rev != bin.Revision() {
 		e.switchBin(bin)
 	}
 
@@ -92,11 +93,12 @@ func (e *LAFFEngine) Reset() {
 // switchBin saves the levels of the current bin and restores those of bin,
 // rebuilding them only if this engine has not seen bin as it is now.
 func (e *LAFFEngine) switchBin(bin *model.Bin) {
-	if e.bin != nil {
-		e.saved.save(e.bin, e.levels)
+	// A state for a bin that changed behind the engine's back is dropped.
+	if e.bin != nil && e.bin != bin {
+		e.saved.save(e.bin, e.levels, e.rev)
 	}
 	if levels, ok := e.saved.load(bin); ok {
-		e.bin, e.levels = bin, levels
+		e.bin, e.levels, e.rev = bin, levels, bin.Revision()
 		return
 	}
 	e.initBin(bin)
@@ -112,12 +114,14 @@ func (e *LAFFEngine) initBin(bin *model.Bin) {
 	for k := range bin.Items {
 		e.addPlaced(bin, k)
 	}
+	e.rev = bin.Revision()
 }
 
 // addPlaced records the level of item k of the bin.
 func (e *LAFFEngine) addPlaced(bin *model.Bin, k int) {
 	lo, hi := bin.Box(k)
 	e.addLevel(lo[model.HeightAxis], hi[model.HeightAxis]-lo[model.HeightAxis])
+	e.rev = bin.Revision()
 }
 
 // addLevel records an item of height h placed at height y.

@@ -277,3 +277,18 @@ func TestWeightLimit(t *testing.T) {
 		t.Error("a bin without a weight limit should carry anything")
 	}
 }
+
+func TestRevisionChangesWithItems(t *testing.T) {
+	b := NewBin("b", 10, 10, 10, 0)
+	r0 := b.Revision()
+	b.PlaceItem(NewItem("a", 1, 1, 1, 1))
+	r1 := b.Revision()
+	b.RemoveLastItem()
+	r2 := b.Revision()
+	if r1 == r0 || r2 == r1 || r2 == r0 {
+		t.Errorf("revisions %d, %d, %d should all differ", r0, r1, r2)
+	}
+	if c := b.Clone(); c.Revision() != b.Revision() {
+		t.Error("a clone should start at the same revision")
+	}
+}
