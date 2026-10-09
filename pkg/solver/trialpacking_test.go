@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -593,4 +594,35 @@ func BenchmarkComparison_Greedy_vs_Trial(b *testing.B) {
 			_, _ = tp.Solve(context.Background(), makeBins(), makeItems())
 		}
 	})
+}
+
+// cancelOnPlace cancels a context the first time it is asked to place.
+type cancelOnPlace struct {
+	inner  placement.Engine
+	cancel context.CancelFunc
+}
+
+func (e *cancelOnPlace) PlaceItem(bin *model.Bin, item *model.Item) bool {
+	e.cancel()
+	return e.inner.PlaceItem(bin, item)
+}
+
+// When the context ends while TrialPacking is choosing a bin type for the
+// last item, it must report the interruption instead of treating the item
+// as one that fits no type: the 2x2x2 type was never tried.
+func TestTrialPackingReportsCancellationDuringBinTypeSearch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	newEngine := func() placement.Engine { return &cancelOnPlace{placement.NewPivotEngine(), cancel} }
+
+	types := []*model.Bin{model.NewBin("small", 1, 1, 1, 0), model.NewBin("fits", 2, 2, 2, 0)}
+	items := []*model.Item{model.NewItem("cube", 2, 2, 2, 1)}
+
+	res, err := NewTrialPacking(newEngine).Solve(ctx, types, items)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if res == nil || res.Stats.UnfittedCount != 1 {
+		t.Errorf("result = %+v, want the item unfitted", res)
+	}
 }

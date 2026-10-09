@@ -2194,7 +2194,10 @@ func TestCoverage_SelectBinType_CtxCancel(t *testing.T) {
 	}
 	remaining := resetItems([]*model.Item{model.NewItem("x", 10, 10, 10, 1)})
 
-	score := tp.selectBinType(ctx, binTypes, remaining)
+	score, err := tp.selectBinType(ctx, binTypes, remaining)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
+	}
 	if score.binTypeIdx != -1 {
 		t.Errorf("expected -1 (no selection due to cancel), got %d", score.binTypeIdx)
 	}

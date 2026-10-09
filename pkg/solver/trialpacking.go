@@ -104,8 +104,14 @@ func (tp *TrialPacking) Solve(ctx context.Context, bins []*model.Bin, items []*m
 		}
 
 		// No existing bin can fit this item. Run trial packing to decide
-		// which bin type to open.
-		best := tp.selectBinType(ctx, bins, remaining)
+		// which bin type to open. If the context ended during the search,
+		// not every type was tried: stop and report it.
+		best, err := tp.selectBinType(ctx, bins, remaining)
+		if err != nil {
+			stopped = err
+			unfitted = append(unfitted, remaining...)
+			break
+		}
 		if best.binTypeIdx < 0 {
 			// Item doesn't fit in any bin type at all.
 			unfitted = append(unfitted, item)
@@ -148,12 +154,14 @@ type trialScore struct {
 }
 
 // selectBinType runs trial packing for each bin type and returns the best.
-func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin, remaining []*model.Item) trialScore {
+// It returns the context error if the context ended before every type was
+// tried (or during a trial).
+func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin, remaining []*model.Item) (trialScore, error) {
 	best := trialScore{binTypeIdx: -1}
 
 	for i, bt := range binTypes {
-		if deadline.Err(ctx) != nil {
-			break
+		if err := deadline.Err(ctx); err != nil {
+			return best, err
 		}
 
 		score := tp.runTrial(ctx, bt, remaining, i)
@@ -174,7 +182,7 @@ func (tp *TrialPacking) selectBinType(ctx context.Context, binTypes []*model.Bin
 		}
 	}
 
-	return best
+	return best, deadline.Err(ctx)
 }
 
 // runTrial simulates packing remaining items into a fresh bin of the given type.
