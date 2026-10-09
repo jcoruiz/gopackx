@@ -25,6 +25,7 @@ Fuzzing every solver and engine against an independent checker found the bugs be
 - **Parallel picked whichever tied configuration finished first.** Ties now go to the first configuration.
 - **Deadlines were ignored in WebAssembly** (`GOOS=js`), where the timer behind `context.WithTimeout` cannot fire while a solver computes. Branch & Bound and TrialPacking now also stop within one placement of the deadline (Branch & Bound took 58 ms for a 30 ms deadline).
 - **Results depended on how often a solver switched bins**: Extreme Points and LAFF rebuilt their state differently from how they had built it while packing.
+- **Engines ignored items removed with `RemoveLastItem`**: Extreme Points and MaxRects kept seeing the removed item and refused to place another one there. Engines now rebuild their state whenever the bin's revision changed.
 
 ### Performance
 
@@ -36,7 +37,7 @@ Fuzzing every solver and engine against an independent checker found the bugs be
 ### Added
 
 - `model.Validate`, `model.ValidationError`, `model.ErrInvalidInput`.
-- `model.Bin`: `TypeID` (the box type a solver opened the bin from), `Load`, `FitsLoadLimits`, `Box`, `Collides`, `RestsOnFragile`, `HasItemOnTop`, `SlideToOrigin`, `HasWeightLimit`, `AllowsWeight`, `CanCarry`, `Clone`, `CloneEmpty`.
+- `model.Bin`: `TypeID` (the box type a solver opened the bin from), `Revision`, `Load`, `FitsLoadLimits`, `Box`, `Collides`, `RestsOnFragile`, `HasItemOnTop`, `SlideToOrigin`, `HasWeightLimit`, `AllowsWeight`, `CanCarry`, `Clone`, `CloneEmpty`.
 - `model.Item`: `Clone`, `ResetPlacement`.
 - `solver.MetaRandomSeed` to explore other metaheuristic solutions.
 - `stability.LoadOnTop`.
