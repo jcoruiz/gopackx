@@ -1,7 +1,7 @@
 package solver
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 
 	"github.com/jcoruiz/gopackx/pkg/model"
@@ -270,7 +270,7 @@ func shakeMove(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 }
 
 // shakeSwap swaps two items between different bins.
-func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
+func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
 	if sol.nBins < 2 {
 		return nil
 	}
@@ -291,7 +291,7 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 	}
 
 	// Shuffle and try pairs from different bins.
-	rand.Shuffle(len(pairs), func(i, j int) {
+	rng.Shuffle(len(pairs), func(i, j int) {
 		pairs[i], pairs[j] = pairs[j], pairs[i]
 	})
 
@@ -334,12 +334,12 @@ func shakeSwap(sol *solution, items []*model.Item, binTypes []*model.Bin) *solut
 
 // shakeRepack tries to eliminate the least-filled bin by redistributing its items.
 // It uses the actual placement engine to verify each redistribution is 3D-feasible.
-func shakeRepack(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
-	return shakeRepackWithEngine(sol, items, binTypes, nil)
+func shakeRepack(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
+	return shakeRepackWithEngine(sol, items, binTypes, nil, rng)
 }
 
 // shakeRepackWithEngine tries to eliminate a bin using optional engine validation.
-func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine) *solution {
+func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine, rng *rand.Rand) *solution {
 	if sol.nBins < 2 {
 		return nil
 	}
@@ -371,7 +371,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 		}
 
 		// Try multiple redistribution orders.
-		result := tryRedistribute(sol, targetBin, targetItems, items, binTypes, newEngine)
+		result := tryRedistribute(sol, targetBin, targetItems, items, binTypes, newEngine, rng)
 		if result != nil {
 			return result
 		}
@@ -381,7 +381,7 @@ func shakeRepackWithEngine(sol *solution, items []*model.Item, binTypes []*model
 
 // tryRedistribute attempts to redistribute items from targetBin to other bins.
 // Tries multiple item orderings and bin orderings to maximize chances.
-func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine) *solution {
+func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*model.Item, binTypes []*model.Bin, newEngine func() placement.Engine, rng *rand.Rand) *solution {
 	// Try different item orderings: volume desc, volume asc, and shuffled.
 	orderings := make([][]int, 3)
 	for o := range 3 {
@@ -397,7 +397,7 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 				return items[ordering[i]].Volume < items[ordering[j]].Volume
 			})
 		case 2: // shuffled
-			rand.Shuffle(len(ordering), func(i, j int) {
+			rng.Shuffle(len(ordering), func(i, j int) {
 				ordering[i], ordering[j] = ordering[j], ordering[i]
 			})
 		}
@@ -471,13 +471,13 @@ func tryRedistribute(sol *solution, targetBin int, targetItems []int, items []*m
 }
 
 // shakeChangeType tries to downsize a bin to a smaller type.
-func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin) *solution {
+func shakeChangeType(sol *solution, items []*model.Item, binTypes []*model.Bin, rng *rand.Rand) *solution {
 	// Try each bin, attempt to use a smaller bin type.
 	binOrder := make([]int, sol.nBins)
 	for i := range binOrder {
 		binOrder[i] = i
 	}
-	rand.Shuffle(len(binOrder), func(i, j int) {
+	rng.Shuffle(len(binOrder), func(i, j int) {
 		binOrder[i], binOrder[j] = binOrder[j], binOrder[i]
 	})
 

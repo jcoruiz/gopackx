@@ -71,47 +71,39 @@ func (p *Parallel) Solve(ctx context.Context, bins []*model.Bin, items []*model.
 		}, nil
 	}
 
-	type entry struct {
-		res *model.Result
-		err error
-	}
-
-	results := make(chan entry, len(p.configs))
+	// One slot per configuration: the winner is chosen in configuration
+	// order, so ties do not depend on which goroutine finishes first.
+	results := make([]*model.Result, len(p.configs))
+	errs := make([]error, len(p.configs))
 	var wg sync.WaitGroup
 
-	for _, cfg := range p.configs {
+	for i, cfg := range p.configs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			// Deep copy bins and items for this goroutine.
 			binsCopy := make([]*model.Bin, len(bins))
-			for i, b := range bins {
-				binsCopy[i] = cloneBinEmpty(b)
+			for j, b := range bins {
+				binsCopy[j] = cloneBinEmpty(b)
 			}
 			itemsCopy := resetItems(items)
 
 			engine := cfg.NewEngine()
-			res, err := packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
-			results <- entry{res, err}
+			results[i], errs[i] = packGreedy(ctx, engine, binsCopy, itemsCopy, cfg.Strategy)
 		}()
 	}
+	wg.Wait()
 
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Every configuration sends a result, so best is never nil. If the
-	// context ended, some configurations stopped early: report it.
+	// If the context ended, some configurations stopped early: report it.
 	var best *model.Result
 	var stopped error
-	for r := range results {
-		if r.err != nil {
-			stopped = r.err
+	for i, res := range results {
+		if errs[i] != nil {
+			stopped = errs[i]
 		}
-		if isBetter(r.res, best) {
-			best = r.res
+		if isBetter(res, best) {
+			best = res
 		}
 	}
 	return best, stopped

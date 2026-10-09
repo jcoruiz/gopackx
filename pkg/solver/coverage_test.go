@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -78,7 +79,7 @@ func TestCoverage_ShakeRepack_NilEngine(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// Call the nil-engine wrapper directly.
-	result := shakeRepack(sol, items, binTypes)
+	result := shakeRepack(sol, items, binTypes, testRand())
 	if result == nil {
 		t.Fatal("expected shakeRepack to succeed redistributing 1 item")
 	}
@@ -129,7 +130,7 @@ func TestCoverage_ShakeChangeType_Downsize(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeChangeType(sol, items, binTypes)
+	result := shakeChangeType(sol, items, binTypes, testRand())
 	if result == nil {
 		t.Fatal("expected shakeChangeType to succeed downsizing")
 	}
@@ -155,7 +156,7 @@ func TestCoverage_ShakeChangeType_NoDownsize(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeChangeType(sol, items, binTypes)
+	result := shakeChangeType(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil (can't downsize), but got a result")
 	}
@@ -178,7 +179,7 @@ func TestCoverage_ShakeChangeType_DimsDontFit(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeChangeType(sol, items, binTypes)
+	result := shakeChangeType(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil (dimension check fails), but got a result")
 	}
@@ -201,7 +202,7 @@ func TestCoverage_ShakeChangeType_WeightDontFit(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeChangeType(sol, items, binTypes)
+	result := shakeChangeType(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil (weight too high), but got a result")
 	}
@@ -782,7 +783,7 @@ func TestCoverage_ShakeSwap_LessThan2Bins(t *testing.T) {
 		nBins:       1,
 	}
 
-	result := shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil with < 2 bins")
 	}
@@ -801,7 +802,7 @@ func TestCoverage_ShakeSwap_SinglePair(t *testing.T) {
 		nBins:       2,
 	}
 
-	result := shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil with < 2 pairs")
 	}
@@ -817,7 +818,7 @@ func TestCoverage_ShakeRepack_LessThan2Bins(t *testing.T) {
 		nBins:       1,
 	}
 
-	result := shakeRepackWithEngine(sol, items, binTypes, nil)
+	result := shakeRepackWithEngine(sol, items, binTypes, nil, testRand())
 	if result != nil {
 		t.Error("expected nil with < 2 bins")
 	}
@@ -839,7 +840,7 @@ func TestCoverage_ShakeChangeType_EmptyBin(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// Should still succeed for the bin with items.
-	result := shakeChangeType(sol, items, binTypes)
+	result := shakeChangeType(sol, items, binTypes, testRand())
 	if result == nil {
 		t.Fatal("expected shakeChangeType to downsize the non-empty bin")
 	}
@@ -1112,7 +1113,7 @@ func TestCoverage_Shake_UnknownOp(t *testing.T) {
 		nBins:       1,
 	}
 
-	result := m.shake(sol, neighborhoodOp(99), items, binTypes)
+	result := m.shake(sol, neighborhoodOp(99), items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil for unknown op")
 	}
@@ -1390,7 +1391,7 @@ func TestCoverage_ShakeSwap_Success(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes, testRand())
 	if result == nil {
 		t.Log("shakeSwap returned nil (swap may not improve) - ok")
 	}
@@ -1440,7 +1441,7 @@ func TestCoverage_ShakeSwap_WeightViolation(t *testing.T) {
 	// heavy(9) swaps with anchor(9): same weight, no improvement
 	// light(1) can't swap with heavy since bin1 would get 9+9=18>10
 	// A returned swap must respect the capacity of every bin.
-	if result := shakeSwap(sol, items, binTypes); result != nil {
+	if result := shakeSwap(sol, items, binTypes, testRand()); result != nil {
 		assertWithinCapacity(t, result, items, binTypes)
 	}
 }
@@ -1461,7 +1462,7 @@ func TestCoverage_ShakeSwap_VolumeViolation(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// A returned swap must respect the capacity of every bin.
-	if result := shakeSwap(sol, items, binTypes); result != nil {
+	if result := shakeSwap(sol, items, binTypes, testRand()); result != nil {
 		assertWithinCapacity(t, result, items, binTypes)
 	}
 }
@@ -1485,7 +1486,7 @@ func TestCoverage_ShakeRepackWithEngine_RedistFails(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeRepackWithEngine(sol, items, binTypes, newPivot)
+	result := shakeRepackWithEngine(sol, items, binTypes, newPivot, testRand())
 	if result != nil {
 		t.Error("expected nil (can't merge two large items into one bin)")
 	}
@@ -1507,7 +1508,7 @@ func TestCoverage_ShakeRepackWithEngine_WeightBlock(t *testing.T) {
 	}
 	sol.score = scoreSolution(sol, items, binTypes)
 
-	result := shakeRepackWithEngine(sol, items, binTypes, nil)
+	result := shakeRepackWithEngine(sol, items, binTypes, nil, testRand())
 	if result != nil {
 		t.Error("expected nil (weight prevents consolidation)")
 	}
@@ -1777,7 +1778,7 @@ func TestCoverage_ShakeSwap_LargeInput(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// This should hit the x > 50 break. Either returns a swap or nil.
-	result := shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes, testRand())
 	if result != nil && len(result.assignments) != n {
 		t.Errorf("assignments length = %d, want %d", len(result.assignments), n)
 	}
@@ -1804,7 +1805,7 @@ func TestCoverage_ShakeRepackWithEngine_EmptyBinInRanked(t *testing.T) {
 
 	// Empty bins are skipped in the ranking. If a repack is returned it must
 	// eliminate at least one bin and keep every bin within capacity.
-	result := shakeRepackWithEngine(sol, items, binTypes, nil)
+	result := shakeRepackWithEngine(sol, items, binTypes, nil, testRand())
 	if result == nil {
 		return
 	}
@@ -2050,7 +2051,7 @@ func TestCoverage_ShakeSwap_VolumeFails(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// A returned swap must respect the capacity of every bin.
-	if result := shakeSwap(sol, items, binTypes); result != nil {
+	if result := shakeSwap(sol, items, binTypes, testRand()); result != nil {
 		assertWithinCapacity(t, result, items, binTypes)
 	}
 }
@@ -2133,7 +2134,7 @@ func TestCoverage_ShakeSwap_AllPairsSameBin(t *testing.T) {
 	sol.score = scoreSolution(sol, items, binTypes)
 
 	// All pairs are in the same bin, so no valid swap exists -> nil.
-	result := shakeSwap(sol, items, binTypes)
+	result := shakeSwap(sol, items, binTypes, testRand())
 	if result != nil {
 		t.Error("expected nil when all items in same bin")
 	}
@@ -2316,7 +2317,7 @@ func TestCoverage_ShakeSwap_WeightCheckFails(t *testing.T) {
 	// Swap anchor(9) with heavy(9): bin0 -> light(1)+heavy(9)=10 ok, bin1 -> anchor(9) ok
 	// This exercises the weight check continue path.
 	// It may find the anchor<->heavy swap, which must be weight-valid.
-	if result := shakeSwap(sol, items, binTypes); result != nil {
+	if result := shakeSwap(sol, items, binTypes, testRand()); result != nil {
 		assertWithinCapacity(t, result, items, binTypes)
 	}
 }
@@ -2436,3 +2437,7 @@ func TestCoverage_DfsFull_Direct_OptimalEarlyReturn(t *testing.T) {
 		t.Errorf("expected optimal count=2, got %d", best.count)
 	}
 }
+
+// testRand returns a generator with a fixed seed for the neighborhood
+// operators.
+func testRand() *rand.Rand { return rand.New(rand.NewPCG(1, 2)) }

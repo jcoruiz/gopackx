@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,54 @@ func TestEntryPointsStopWhenTheDeadlineTimerCannotFire(t *testing.T) {
 			}
 			if res == nil {
 				t.Fatal("result is nil")
+			}
+		})
+	}
+}
+
+func fingerprint(r *model.Result) string {
+	var b strings.Builder
+	for _, bin := range r.Bins {
+		b.WriteString(bin.ID + "[")
+		for _, it := range bin.Items {
+			b.WriteString(it.ID + "@" + strconv.FormatFloat(it.Position[0], 'g', -1, 64) + "," +
+				strconv.FormatFloat(it.Position[1], 'g', -1, 64) + "," + strconv.FormatFloat(it.Position[2], 'g', -1, 64) +
+				"/" + strconv.Itoa(int(it.RotationType)) + " ")
+		}
+		b.WriteString("] ")
+	}
+	return b.String()
+}
+
+// The same input gives the same packing every time. The metaheuristic used
+// the global random source: 13 of 40 scenarios came out different on a
+// second run, some with a lower fill (84.4% vs 79.5%).
+func TestEntryPointsAreDeterministic(t *testing.T) {
+	input := func() ([]*model.Bin, []*model.Item) {
+		bins := []*model.Bin{model.NewBin("S", 30, 25, 20, 1e9), model.NewBin("M", 40, 35, 30, 1e9), model.NewBin("L", 60, 50, 40, 1e9)}
+		items := make([]*model.Item, 36)
+		for i := range items {
+			items[i] = model.NewItem("i"+strconv.Itoa(i), float64(5+i*7%25), float64(5+i*11%25), float64(5+i*13%25), 1)
+		}
+		return bins, items
+	}
+	for _, ep := range entryPoints {
+		if ep.name == "BranchBound" {
+			continue // exhaustive search, deterministic by construction and slow here
+		}
+		t.Run(ep.name, func(t *testing.T) {
+			b1, i1 := input()
+			r1, err := ep.run(context.Background(), b1, i1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b2, i2 := input()
+			r2, err := ep.run(context.Background(), b2, i2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fingerprint(r1) != fingerprint(r2) {
+				t.Errorf("two runs differ:\n%s\n%s", fingerprint(r1), fingerprint(r2))
 			}
 		})
 	}
