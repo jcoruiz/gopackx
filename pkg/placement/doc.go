@@ -11,10 +11,12 @@
 // Four placement engines are provided, each with different trade-offs:
 //
 // [PivotEngine] generates candidate positions from the corners of already-placed
-// items (pivot points). It tries each pivot with every allowed rotation and
-// selects the first valid placement. After placement, fix-point correction
-// pushes the item toward the origin to eliminate floating gaps. This is the
-// default engine used by the packer.
+// items (pivot points). It tries the pivots lowest first (Y, then Z, then X),
+// each with every allowed rotation, and selects the first valid placement, so
+// items fill the floor and lower levels before being stacked on top of other
+// items. After placement, fix-point correction pushes the item toward the
+// origin to eliminate floating gaps. This is the default engine used by the
+// packer.
 //
 //	engine := placement.NewPivotEngine(
 //	    placement.WithStability(0.7), // require 70% base support

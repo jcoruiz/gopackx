@@ -42,8 +42,9 @@ The Pivot Points engine generates candidate placement positions from the corners
    - `(x, y + height, z)` -- on top
    - `(x, y, z + depth)` -- behind
 3. The origin `(0, 0, 0)` is always included as a candidate
-4. For each pivot point, all allowed rotations are tried
-5. The first valid placement is accepted
+4. Pivots are tried lowest first: sorted by Y, then Z, then X. An item goes to the floor or the lowest free level before it is stacked on top of other items
+5. For each pivot point, all allowed rotations are tried
+6. The first valid placement is accepted
 
 After a valid placement is found, **fix-point correction** pushes the item toward the origin along each axis (Y first for gravity, then X, then Z). This compaction step eliminates floating gaps and produces tighter packing. If the corrected position is invalid (e.g., fails stability checks), the original position is kept.
 
@@ -58,7 +59,7 @@ After a valid placement is found, **fix-point correction** pushes the item towar
 - **Speed**: ~0.1ms for 50 items (336 allocs, 33KB)
 - **Quality**: Good -- fix-point correction produces reasonably tight packing
 - **Scaling**: O(n^2) placement checks (each new item checks against all placed items)
-- **State**: Stateless -- generates pivots fresh for each placement call
+- **State**: Keeps the sorted pivots of every bin it packs and inserts the pivots of each new item (see [Engine State](#engine-state))
 - **Best for**: General-purpose use, good balance of speed and quality
 
 ### Example
@@ -276,7 +277,7 @@ All engines try every allowed rotation for each candidate position. Default: all
 
 ### Engine State
 
-Extreme Points, MaxRects and LAFF keep per-bin state (points, free spaces, levels) for every bin they pack, so a solver can switch between open bins without rebuilding it. A bin an engine has not packed itself is rebuilt from its items exactly as if the engine had placed them, so one engine switching between bins gives the same result as one engine per bin.
+All engines keep per-bin state (pivots, points, free spaces, levels) for every bin they pack, so a solver can switch between open bins without rebuilding it. A bin an engine has not packed itself is rebuilt from its items exactly as if the engine had placed them, so one engine switching between bins gives the same result as one engine per bin.
 
 Engines are not safe for concurrent use: give each goroutine its own (solvers take engine factories for this). To reuse an engine for an unrelated packing run, call `Reset()`; `packer.Packer` does it on every `Pack`.
 
@@ -294,7 +295,7 @@ Times from the `BenchmarkPack50Items_*` benchmarks in `pkg/packer` on an AMD Ryz
 | **Quick rejection** | Recent blockers | MaxSpace, score first | Space size | Recent blockers |
 | **Gravity projection** | Fix-point | Yes | Yes | Fix-point |
 | **Scoring** | First valid | Multi-criteria best | Best short side fit | First valid |
-| **State** | Stateless | Per bin | Per bin | Per bin |
+| **State** | Per bin | Per bin | Per bin | Per bin |
 | **Scaling** | O(n^2) | O(n^2) | O(n * spaces) | O(n * levels) |
 | **Best for** | General purpose | Quality-critical | Mixed sizes | High throughput |
 

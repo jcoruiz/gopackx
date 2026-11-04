@@ -166,8 +166,7 @@ Solvers (`Parallel`, `BranchBound`) internally deep-copy bins and items to ensur
 
 ### Engine State
 
-- **Pivot**: Stateless -- no per-bin state. Pivot points are generated fresh for each `PlaceItem` call.
-- **ExtremePoints**, **MaxRects**, **LAFF**: keep the state (points, free spaces, levels) of every bin they pack, so solvers can switch between open bins without rebuilding it. Memory grows with item count. Call `Reset()` before reusing an engine for an unrelated run; the Packer does it on every `Pack`.
+- **Pivot**, **ExtremePoints**, **MaxRects**, **LAFF**: keep the state (sorted pivots, points, free spaces, levels) of every bin they pack, so solvers can switch between open bins without rebuilding it. Memory grows with item count. Call `Reset()` before reusing an engine for an unrelated run; the Packer does it on every `Pack`.
 
 ### Load Tracking
 

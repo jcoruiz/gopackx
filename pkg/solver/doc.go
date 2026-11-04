@@ -43,7 +43,7 @@
 //	result, err := m.Solve(ctx, binTypes, items)
 //
 // The metaheuristic starts from a TrialPacking seed and iteratively improves
-// it. It is slower (~30ms for 17 items) but can reduce bin count beyond what
+// it. It is slower (~70ms for 17 items) but can reduce bin count beyond what
 // greedy approaches achieve.
 //
 // # BranchBound

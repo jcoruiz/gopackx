@@ -13,7 +13,7 @@ GoPackX provides four solvers:
 | Solver | Use Case | Speed | Quality |
 |---|---|---|---|
 | **TrialPacking** | Variable-sized bin packing (VSBPP) | Fast (~60µs) | Good |
-| **Metaheuristic** | Cross-bin optimization (VSBPP) | Moderate (~34ms) | Best |
+| **Metaheuristic** | Cross-bin optimization (VSBPP) | Moderate (~70ms) | Best |
 | **Branch & Bound** | Optimal single-bin packing | Varies | Optimal (small sets) |
 | **Parallel** | Concurrent multi-configuration search | Fast | Good |
 
@@ -128,7 +128,7 @@ for seed := uint64(2); seed <= 5; seed++ {
 
 | Scenario | Time | Result |
 |---|---|---|
-| 17 items, 4 bin types (real order) | ~34ms | 3 boxes (vs. 4 with TrialPacking) |
+| 17 items, 4 bin types (real order) | ~70ms | 4 boxes (same as TrialPacking) |
 | 20 items, 3 bin types (generic) | ~120µs | Same as seed (already optimal) |
 
 The metaheuristic adds minimal overhead when the seed is already optimal. The cost is only significant when cross-bin redistribution finds improvements.
@@ -403,7 +403,7 @@ All benchmarks run on AMD Ryzen 9 9950X3D:
 |---|---|---|---|---|
 | TrialPacking | 20 items, 3 bin types | ~84µs | 70KB | 471 |
 | TrialPacking (lookahead) | 20 items, 3 bin types | ~58µs | 50KB | 306 |
-| Metaheuristic | 17 items, 4 bin types | ~34ms | 46MB | 441K |
+| Metaheuristic | 17 items, 4 bin types | ~70ms | 88MB | 894K |
 | Metaheuristic | 20 items, 3 bin types | ~120µs | 176KB | 2.2K |
 | BB Fast | 6 items | ~2.6µs | 5.8KB | 51 |
 | BB Fast | 8 items | ~4.0µs | 8.2KB | 62 |
