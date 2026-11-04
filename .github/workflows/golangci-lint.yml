@@ -17,7 +17,9 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: stable
+          # golangci-lint v2.13 cannot read the export data of Go 1.27.3
+          # ("export data version 5"). Go back to stable once it can.
+          go-version: '1.26'
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
