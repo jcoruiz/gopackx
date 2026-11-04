@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.1 (2026-11-04)
+
+### Fixed
+
+- **Pivot stacked items on top of others while the floor was free.** It tried pivots in the order it generated them, item by item, so the point on top of the first item came before the floor point next to the second one. An item could end up resting on two reams with a large overhang next to an empty floor. Pivots are now tried lowest first (Y, then Z, then X). Over 1,000 random scenarios, items with less than 50% support drop from 6,756 to 3,350 with `gopackx.Pack`, and `Pack` with 70% stability uses 13% fewer boxes. Without stability, `Pack` uses 0.8% more boxes and `Optimize` 1.9% more; the real 17-item order in the benchmarks packs into 4 boxes with `Optimize` (was 3) and takes about twice as long.
+
 ## v0.3.0 (2026-10-09)
 
 This release fixes physical rules that packings could break, makes results deterministic and consistent across solvers, and speeds up the stateful engines. Several behaviors change: read **Breaking changes** before upgrading.

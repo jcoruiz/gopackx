@@ -47,6 +47,7 @@ var engineFactories = map[string]func() Engine{
 	"LAFF":             func() Engine { return NewLAFFEngine() },
 	"LAFFFast":         func() Engine { return NewLAFFEngine(LAFFFast()) },
 	"Pivot":            func() Engine { return NewPivotEngine() },
+	"Pivot-S70":        func() Engine { return NewPivotEngine(WithStability(0.7)) },
 }
 
 func dedicated(newEngine func() Engine) func(int) Engine {

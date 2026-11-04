@@ -1,6 +1,8 @@
 package placement
 
 import (
+	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/jcoruiz/gopackx/pkg/intersection"
@@ -288,4 +290,73 @@ func TestFixPointCompaction(t *testing.T) {
 	if !hasZero {
 		t.Errorf("fix-point should compact item to a wall, pos = %v", i2.Position)
 	}
+}
+
+// Two reams standing on the floor leave most of it free. The bond paper
+// must go to the floor instead of being stacked on top of the reams.
+func TestPivotPrefersFloorOverStacking(t *testing.T) {
+	engine := NewPivotEngine()
+	bin := model.NewBin("large", 40, 40, 30, 20)
+
+	for _, id := range []string{"ream-1", "ream-2"} {
+		ream := model.NewItem(id, 23.5, 6, 34.5, 2.78)
+		if !engine.PlaceItem(bin, ream) {
+			t.Fatalf("failed to place %s", id)
+		}
+	}
+	bond := model.NewItem("bond", 28, 5, 22, 2.5)
+	if !engine.PlaceItem(bin, bond) {
+		t.Fatal("failed to place bond paper")
+	}
+
+	for _, it := range bin.Items {
+		if it.Position[model.HeightAxis] != 0 {
+			t.Errorf("%s at %v, want it on the floor", it.ID, it.Position)
+		}
+	}
+}
+
+// The engine keeps sorted pivots per bin between calls. Whatever the bin went
+// through (items added or removed, several bins interleaved), the pivots must
+// match the ones built from scratch.
+func TestPivotKeptPivotsMatchFreshOnes(t *testing.T) {
+	engine := NewPivotEngine()
+	rng := rand.New(rand.NewSource(1))
+
+	bins := make([]*model.Bin, 8)
+	for i := range bins {
+		bins[i] = model.NewBin("b", 30, 30, 30, 1e9)
+	}
+
+	for step := range 5000 {
+		bin := bins[rng.Intn(len(bins))]
+		if len(bin.Items) > 0 && rng.Intn(4) == 0 {
+			bin.RemoveLastItem()
+		} else {
+			item := model.NewItem("i", float64(2+rng.Intn(8)), float64(2+rng.Intn(8)), float64(2+rng.Intn(8)), 1)
+			engine.PlaceItem(bin, item)
+		}
+
+		if engine.bin != bin || engine.rev != bin.Revision() {
+			engine.switchBin(bin)
+		}
+		if want := freshPivots(bin); !slices.Equal(engine.pivots, want) {
+			t.Fatalf("step %d: kept pivots differ from fresh ones\ngot  %v\nwant %v", step, engine.pivots, want)
+		}
+	}
+}
+
+// freshPivots builds the sorted, deduplicated pivots of bin from its items.
+func freshPivots(bin *model.Bin) [][3]float64 {
+	pts := [][3]float64{{0, 0, 0}}
+	for k := range bin.Items {
+		lo, hi := bin.Box(k)
+		pts = append(pts,
+			[3]float64{hi[0], lo[1], lo[2]},
+			[3]float64{lo[0], hi[1], lo[2]},
+			[3]float64{lo[0], lo[1], hi[2]},
+		)
+	}
+	slices.SortFunc(pts, comparePivots)
+	return slices.Compact(pts)
 }

@@ -46,7 +46,7 @@ type packConfig struct {
 }
 
 // Optimize enables the metaheuristic solver that redistributes items across
-// bins to minimize total box count. This is slower (~30ms for 17 items) but
+// bins to minimize total box count. This is slower (~70ms for 17 items) but
 // can find solutions that greedy approaches miss.
 //
 // Without this option, Pack uses TrialPacking with lookahead which is fast
